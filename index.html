@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>聲音同步播放網頁 | Audio Sync</title>
+  
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- External Libraries (QR Code Generator & Scanner) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+
+  <div id="app-container">
+
+    <!-- VIEW 1: ROLE SELECTION -->
+    <div id="view-role-selection" class="panel-card">
+      <div class="app-header">
+        <h1 class="app-title">聲音同步播放</h1>
+        <p class="app-subtitle">請選擇您的裝置角色</p>
+      </div>
+      <div class="role-grid">
+        <button id="btn-select-master" class="role-btn">
+          <div class="role-icon">🎛️</div>
+          <div class="role-name">主控者</div>
+          <div class="role-desc">設置同步範圍、聲部數量與曲目，發起校正與播控</div>
+        </button>
+        <button id="btn-select-slave" class="role-btn">
+          <div class="role-icon">📱</div>
+          <div class="role-name">非主控者</div>
+          <div class="role-desc">掃描 Qrcode 選擇聲部，加入聲學同步播放</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- VIEW 2: MASTER SETUP -->
+    <div id="view-master-setup" class="panel-card hidden">
+      <div class="app-header">
+        <h1 class="app-title">主控者設定</h1>
+        <p class="app-subtitle">設定同步參數與 YouTube 播控清單</p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="select-range">
+          <span>同步範圍</span>
+          <span id="range-zone-badge" style="font-size:0.75rem; color:var(--accent-cyan);">區間 A (周期 0.5s)</span>
+        </label>
+        <select id="select-range" class="form-select">
+          <option value="10m">10 公尺 (區間 A)</option>
+          <option value="20m">20 公尺 (區間 A)</option>
+          <option value="50m" selected>50 公尺 (區間 A)</option>
+          <option value="70m">70 公尺 (區間 B)</option>
+          <option value="100m">100 公尺 (區間 B)</option>
+          <option value="150m">150 公尺 (區間 C)</option>
+          <option value="200m">200 公尺 (區間 C)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="select-parts">聲部數量</label>
+        <select id="select-parts" class="form-select">
+          <option value="0">0 聲部</option>
+          <option value="1">1 聲部</option>
+          <option value="2">2 聲部</option>
+          <option value="3">3 聲部</option>
+          <option value="4" selected>4 聲部</option>
+          <option value="5">5 聲部</option>
+          <option value="6">6 聲部</option>
+          <option value="7">7 聲部</option>
+          <option value="8">8 聲部</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">
+          <span>YouTube 連結</span>
+          <span id="yt-count-label" style="font-size:0.75rem; color:var(--text-muted);">0 / 50</span>
+        </label>
+        <div class="input-with-btn">
+          <input type="text" id="input-yt-url" class="form-input" placeholder="貼上 YouTube 網址或 Video ID">
+          <button id="btn-add-yt" class="btn-icon-add">+</button>
+        </div>
+      </div>
+
+      <div id="yt-link-list" class="yt-list-container">
+        <!-- Dynamic YouTube item pills -->
+      </div>
+
+      <button id="btn-confirm-master-setup" class="btn-primary">確認並產生 QR Code</button>
+    </div>
+
+    <!-- VIEW 3: MASTER QR CODE & SYNC TRIGGER -->
+    <div id="view-master-qr" class="panel-card hidden">
+      <div class="app-header">
+        <h1 class="app-title">提供裝置掃描</h1>
+        <p class="app-subtitle">請讓非主控者掃描此 Qrcode 進行設定</p>
+      </div>
+
+      <div class="qr-display-area">
+        <div id="qrcode-canvas-container"></div>
+      </div>
+
+      <button id="btn-start-sync-master" class="btn-primary">同步 (發起共用 clk 校正)</button>
+    </div>
+
+    <!-- VIEW 4: SLAVE SCANNER & PART SELECTION -->
+    <div id="view-slave-setup" class="panel-card hidden">
+      <div class="app-header">
+        <h1 class="app-title">非主控者設定</h1>
+        <p class="app-subtitle">對準主控者畫面的 Qrcode 進行掃描</p>
+      </div>
+
+      <!-- Camera Scanner Container -->
+      <div id="scanner-box" class="scanner-viewport">
+        <div id="reader"></div>
+      </div>
+
+      <!-- Fallback Input Toggle -->
+      <div style="text-align:center; margin-bottom:0.5rem;">
+        <button id="btn-toggle-manual-input" style="background:none; border:none; color:var(--accent-cyan); font-size:0.8rem; cursor:pointer; text-decoration:underline;">
+          鏡頭無法開啟？改用手動輸入同步碼
+        </button>
+      </div>
+      <div id="manual-input-box" class="form-group hidden">
+        <input type="text" id="input-manual-json" class="form-input" placeholder="在此貼上同步 JSON 數據">
+        <button id="btn-submit-manual-json" class="btn-primary" style="margin-top:0.5rem;">載入數據</button>
+      </div>
+
+      <!-- Part Selection Section (Hidden until QR scanned) -->
+      <div id="part-selection-box" class="hidden">
+        <div class="form-label" style="text-align:center; display:block; margin-bottom:0.5rem;">
+          請選擇您的聲部
+        </div>
+        <div id="slave-parts-grid" class="parts-grid">
+          <!-- Dynamic part buttons -->
+        </div>
+      </div>
+
+      <!-- Waiting Overlay -->
+      <div id="slave-waiting-box" class="hidden" style="text-align:center; padding:1rem 0;">
+        <div class="sync-status-text">等待同步中...</div>
+        <div class="sync-subtext">主控者按下「同步」按鈕後將自動進行聲學校正</div>
+      </div>
+    </div>
+
+    <!-- VIEW 5: SYNCHRONIZING CALIBRATION STATE -->
+    <div id="view-syncing" class="panel-card hidden">
+      <div class="sync-animation-box">
+        <div class="pulse-circle">📡</div>
+        <div class="sync-status-text">正在同步...</div>
+        <div class="sync-subtext">透過耦合振盪器原理進行共用 clk 聲學校正中</div>
+      </div>
+    </div>
+
+    <!-- VIEW 6: MASTER CONTROL CONSOLE -->
+    <div id="view-master-control" class="panel-card hidden">
+      <div class="app-header">
+        <h1 class="app-title">主控操控台</h1>
+        <p class="app-subtitle" id="master-status-indicator">狀態：共用 clk 校正完畢</p>
+      </div>
+
+      <div class="master-controls">
+        <div class="player-card">
+          <div class="track-info">
+            <div class="track-icon">🎵</div>
+            <div class="track-details">
+              <div id="master-track-title" class="track-title">曲目準備中...</div>
+              <div id="master-track-index" class="track-index">第 1 / 1 首</div>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <button id="btn-next-track" class="btn-control" title="跳下一首">⏭️</button>
+            <button id="btn-play-pause" class="btn-control primary-play" title="播放/暫停">▶️</button>
+          </div>
+
+          <div class="progress-bar-container">
+            <span id="time-current" class="time-stamp">00:00</span>
+            <input type="range" id="seek-slider" class="slider-input" min="0" max="100" value="0" step="1">
+            <span id="time-duration" class="time-stamp">00:00</span>
+          </div>
+        </div>
+
+        <div class="form-label" style="margin-top:0.5rem;">聲部控制按鈕 (發聲 / 靜音)</div>
+        <div id="master-part-buttons" class="part-toggle-grid">
+          <!-- Dynamic voice part toggles (Part 1 ~ Part N) -->
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 7: SLAVE FULLSCREEN STATUS DISPLAY -->
+    <div id="view-slave-status" class="slave-fullscreen-view hidden">
+      <div id="slave-music-note" class="music-note-icon">🎵</div>
+      <div id="slave-part-badge" class="slave-part-badge">第 1 聲部 (已暫停)</div>
+    </div>
+
+  </div>
+
+  <!-- Hidden YouTube IFrame Container -->
+  <div id="yt-player-container">
+    <div id="yt-player"></div>
+  </div>
+
+  <!-- Main JavaScript App Entry Point -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
