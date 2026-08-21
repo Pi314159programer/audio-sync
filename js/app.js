@@ -148,7 +148,8 @@ class AppController {
     document.getElementById('btn-submit-manual-json').addEventListener('click', () => {
       const jsonStr = document.getElementById('input-manual-json').value.trim();
       try {
-        const data = JSON.parse(jsonStr);
+        const rawData = JSON.parse(jsonStr);
+        const data = this.qrManager.decompressPayload(rawData);
         this.onSlaveQRScanned(data);
       } catch (err) {
         alert("格式錯誤，請確定輸入的是正確的 JSON 設定數據");

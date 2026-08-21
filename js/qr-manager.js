@@ -7,41 +7,66 @@ export class QRManager {
   }
 
   /**
+   * Compress payload into minimal JSON structure for faster QR recognition
+   */
+  compressPayload(payload) {
+    const extractId = (url) => {
+      const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
+      return (match && match[2] && match[2].length === 11) ? match[2] : url;
+    };
+
+    return {
+      r: payload.range,
+      p: payload.partCount,
+      v: (payload.urls || []).map(extractId)
+    };
+  }
+
+  /**
+   * Decompress payload on scanning
+   */
+  decompressPayload(compact) {
+    if (compact.r !== undefined) {
+      return {
+        range: compact.r,
+        partCount: compact.p,
+        urls: (compact.v || []).map(id => id.length === 11 ? `https://www.youtube.com/watch?v=${id}` : id)
+      };
+    }
+    return compact; // fallback for uncompressed format
+  }
+
+  /**
    * Render QR Code for Master Configuration Payload
-   * @param {string} containerId 
-   * @param {object} payloadObject { urls, range, zone, parts }
    */
   renderQRCode(containerId, payloadObject) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
 
-    const jsonStr = JSON.stringify(payloadObject);
+    const compactData = this.compressPayload(payloadObject);
+    const jsonStr = JSON.stringify(compactData);
 
-    // Use QRCode library if loaded globally via CDN, else use fallback API
     if (window.QRCode) {
       new window.QRCode(container, {
         text: jsonStr,
-        width: 200,
-        height: 200,
+        width: 220,
+        height: 220,
         colorDark : "#0f172a",
         colorLight : "#ffffff",
         correctLevel : window.QRCode.CorrectLevel.M
       });
     } else {
-      // Fallback image generator via QR server API if CDN fails
       const img = document.createElement('img');
-      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(jsonStr)}`;
-      img.width = 200;
-      img.height = 200;
+      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(jsonStr)}`;
+      img.width = 220;
+      img.height = 220;
       container.appendChild(img);
     }
   }
 
   /**
    * Start Camera Scanner for Slave Device
-   * @param {string} readerElementId 
-   * @param {function} onScanSuccess 
    */
   async startScanner(readerElementId, onScanSuccess) {
     if (window.Html5Qrcode) {
@@ -49,10 +74,19 @@ export class QRManager {
       try {
         await this.html5QrCode.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 200, height: 200 } },
+          { 
+            fps: 15,
+            aspectRatio: 1.0,
+            qrbox: (viewfinderWidth, viewfinderHeight) => {
+              const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+              const boxSize = Math.floor(minEdge * 0.75);
+              return { width: boxSize, height: boxSize };
+            }
+          },
           (decodedText) => {
             try {
-              const data = JSON.parse(decodedText);
+              const rawData = JSON.parse(decodedText);
+              const data = this.decompressPayload(rawData);
               this.stopScanner();
               onScanSuccess(data);
             } catch (err) {
