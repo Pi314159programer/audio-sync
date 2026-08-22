@@ -614,8 +614,8 @@ class AppController {
         this.masterErrMs = Math.round(err);
       }
 
-      // Pulse white ball for 250ms (or 50% of periodMs) at start of each common clock cycle
-      const pulseDurationMs = Math.min(250, periodMs * 0.5);
+      // Pulse white ball for 250ms (or 50% of activeLimit) at start of each common clock cycle
+      const pulseDurationMs = Math.min(250, activeLimit * 0.5);
       const isActive = offsetInCycle < pulseDurationMs;
 
       const masterBall = document.getElementById('master-clk-ball');
