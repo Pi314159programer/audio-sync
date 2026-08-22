@@ -135,8 +135,8 @@ export class QRManager {
     };
 
     drawFrame();
-    // Dynamic QR stream (~150ms per frame for clear camera recognition)
-    this.dynamicTimer = setInterval(drawFrame, 150);
+    // Dynamic QR stream (~80ms per frame for high-speed optical transfer)
+    this.dynamicTimer = setInterval(drawFrame, 80);
   }
 
   /**
@@ -166,7 +166,7 @@ export class QRManager {
         await this.html5QrCode.start(
           { facingMode: "environment" },
           { 
-            fps: 25,
+            fps: 30,
             aspectRatio: 1.0,
             qrbox: (viewfinderWidth, viewfinderHeight) => {
               const minEdge = Math.min(viewfinderWidth, viewfinderHeight);

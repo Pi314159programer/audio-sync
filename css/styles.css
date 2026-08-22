@@ -280,20 +280,27 @@ html, body {
 
 #qrcode-canvas-container {
   background: white;
-  padding: 12px;
+  padding: 14px;
   border-radius: 16px;
   box-shadow: 0 10px 25px rgba(0,0,0,0.5);
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 254px;
-  min-height: 254px;
+  width: 258px;
+  height: 258px;
+  box-sizing: border-box;
+  aspect-ratio: 1 / 1;
 }
 
-#qrcode-canvas-container canvas, #qrcode-canvas-container img {
+#qrcode-canvas-container canvas {
   width: 230px !important;
   height: 230px !important;
   display: block !important;
+  aspect-ratio: 1 / 1;
+}
+
+#qrcode-canvas-container img {
+  display: none !important;
 }
 
 /* Scanner & Code Input Box */
