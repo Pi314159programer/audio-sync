@@ -21,6 +21,17 @@
 
   <div id="app-container">
 
+    <!-- Real-time Diagnostic Debug HUD Overlay -->
+    <div id="debug-hud" class="debug-hud">
+      <div class="debug-title">🛠️ Live Sync Debug HUD</div>
+      <div class="debug-row"><span>Role / Zone:</span> <strong id="db-role-zone">Master (Zone A)</strong></div>
+      <div class="debug-row"><span>Master m:</span> <strong id="db-master-m">0 ms</strong></div>
+      <div class="debug-row"><span>Slave self m:</span> <strong id="db-slave-m">0 ms</strong></div>
+      <div class="debug-row"><span>Phase Error:</span> <strong id="db-diff-ms">0 ms</strong></div>
+      <div class="debug-row"><span>Sync Mode:</span> <strong id="db-mode">READY</strong></div>
+      <div class="debug-row"><span>Lock Cycles:</span> <strong id="db-locks">0 / 3</strong></div>
+    </div>
+
     <!-- VIEW 1: ROLE SELECTION -->
     <div id="view-role-selection" class="panel-card">
       <div class="app-header">

@@ -40,14 +40,15 @@ export class QRManager {
   /**
    * Decompress payload on scanning
    */
+  /**
+   * Decompress payload on scanning
+   */
   decompressPayload(compact) {
     return {
       range: compact.r || '50m',
       partCount: compact.p || 4,
       urls: (compact.v || []).map(id => id.length === 11 ? `https://www.youtube.com/watch?v=${id}` : id),
       period: compact.per || 0.5,
-      clk: compact.clk || 0,
-      cyc: compact.cyc || 0,
       m: compact.m || 0,
       pulse: !!compact.pulse
     };
@@ -99,7 +100,6 @@ export class QRManager {
 
       const now = performance.now();
       const elapsed = now - masterT0;
-      const cycleIndex = Math.floor(elapsed / periodMs);
       const m = Math.round(elapsed) % periodMs; // Millisecond counter 0..periodMs-1
 
       // Pulse marker true at the exact start (first 100ms) of every clock cycle
@@ -108,8 +108,6 @@ export class QRManager {
       const framePayload = {
         ...baseCompact,
         per: periodSec,
-        clk: Math.round(now),
-        cyc: cycleIndex,
         m: m,
         pulse: isPulseFrame ? 1 : 0,
         seq: this.frameSeq
@@ -190,12 +188,8 @@ export class QRManager {
               const rawData = JSON.parse(decodedText);
               decodedConfig = this.decompressPayload(rawData);
 
-              if (rawData.cyc !== undefined) {
-                observedCycles.add(rawData.cyc);
-              }
-
               const periodMs = (decodedConfig.period || 0.5) * 1000;
-              const masterM = rawData.m !== undefined ? rawData.m : (rawData.clk % periodMs);
+              const masterM = rawData.m !== undefined ? rawData.m : 0;
 
               // Account for camera capture & JSON parsing latency (~10ms)
               const transitLatency = Math.round(performance.now() - scanTime);
@@ -210,22 +204,40 @@ export class QRManager {
               const selfElapsed = Math.round(now - slaveT0);
               const selfM = ((selfElapsed % periodMs) + periodMs) % periodMs;
 
-              // Millisecond count difference modulo periodMs
-              let diffMs = Math.abs(selfM - targetM);
-              if (diffMs > periodMs / 2) diffMs = periodMs - diffMs;
+              // Calculate signed millisecond difference in range [-periodMs/2, +periodMs/2]
+              let err = targetM - selfM;
+              if (err > periodMs / 2) err -= periodMs;
+              if (err < -periodMs / 2) err += periodMs;
+              const absErr = Math.abs(err);
 
-              if (diffMs > 50) {
-                // Difference exceeds 50ms threshold: Assimilate / override local slaveT0 directly
+              let adjustMode = 'LOCKED';
+              if (absErr > 300) {
+                // Rule A: Large error > 300ms -> Coarse Hard Reset
                 slaveT0 = now - targetM;
                 consecutiveLockCount = 0;
+                adjustMode = 'HARD_RESET';
+              } else if (absErr > 50) {
+                // Rule B: Medium error 50ms..300ms -> Soft Gradual Proportional Nudge (no scanner reset!)
+                slaveT0 = slaveT0 - (err * 0.5);
+                consecutiveLockCount = 0;
+                adjustMode = 'SOFT_NUDGE';
               } else {
-                // Difference within 50ms threshold: Millisecond counter phase locked!
+                // Rule C: Small error <= 50ms -> Phase Locked!
                 consecutiveLockCount++;
+                adjustMode = 'LOCKED';
               }
+
+              // Track cycle index for multi-cycle verification
+              const currentCycle = Math.floor(selfElapsed / periodMs);
+              observedCycles.add(currentCycle);
 
               decodedConfig.scanTime = scanTime;
               decodedConfig.alignedT0 = slaveT0;
-              decodedConfig.diffMs = diffMs;
+              decodedConfig.masterM = masterM;
+              decodedConfig.selfM = selfM;
+              decodedConfig.diffMs = Math.round(err);
+              decodedConfig.absErr = Math.round(absErr);
+              decodedConfig.mode = adjustMode;
 
               const cycleCount = observedCycles.size;
               const isPhaseLocked = consecutiveLockCount >= 3;
@@ -242,7 +254,11 @@ export class QRManager {
                     resolvedCount: status.resolvedCount,
                     totalBlocks: status.totalBlocks,
                     cycleCount: cycleCount,
-                    diffMs: diffMs
+                    masterM: masterM,
+                    selfM: selfM,
+                    diffMs: Math.round(err),
+                    mode: adjustMode,
+                    isLocked: isPhaseLocked
                   });
                 }
 
@@ -261,7 +277,11 @@ export class QRManager {
                     resolvedCount: cycleCount,
                     totalBlocks: 3,
                     cycleCount: cycleCount,
-                    diffMs: diffMs
+                    masterM: masterM,
+                    selfM: selfM,
+                    diffMs: Math.round(err),
+                    mode: adjustMode,
+                    isLocked: isPhaseLocked
                   });
                 }
 

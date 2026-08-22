@@ -814,3 +814,48 @@ html, body {
   opacity: 0;
   pointer-events: none;
 }
+
+/* Real-time Diagnostic Debug HUD Overlay */
+.debug-hud {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-family: monospace, SFMono-Regular, Consolas, sans-serif;
+  font-size: 0.72rem;
+  color: #e2e8f0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  width: 210px;
+  pointer-events: none;
+  transition: all 0.3s ease;
+}
+
+.debug-title {
+  font-weight: 700;
+  color: #38bdf8;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 3px;
+  font-size: 0.75rem;
+}
+
+.debug-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 3px;
+  align-items: center;
+}
+
+.debug-row span {
+  color: #94a3b8;
+}
+
+.debug-row strong {
+  color: #4ade80;
+  font-weight: 700;
+}

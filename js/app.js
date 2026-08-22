@@ -511,7 +511,45 @@ class AppController {
         if (isActive) ball.classList.add('active');
         else ball.classList.remove('active');
       });
+
+      // Continuously update Real-time Live Debug HUD
+      this.updateDebugHUD(Math.round(offsetInCycle));
     }, 20);
+  }
+
+  updateDebugHUD(selfM) {
+    const roleZoneEl = document.getElementById('db-role-zone');
+    const masterMEl = document.getElementById('db-master-m');
+    const slaveMEl = document.getElementById('db-slave-m');
+    const diffMsEl = document.getElementById('db-diff-ms');
+    const modeEl = document.getElementById('db-mode');
+
+    if (roleZoneEl) roleZoneEl.innerText = `${(this.role || 'device').toUpperCase()} (Zone ${this.config.zone || 'A'})`;
+    if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
+
+    if (this.lastDebugData) {
+      if (masterMEl) masterMEl.innerText = `${this.lastDebugData.masterM !== undefined ? this.lastDebugData.masterM : 0} ms`;
+      if (diffMsEl) {
+        const diff = this.lastDebugData.diffMs || 0;
+        diffMsEl.innerText = `${diff > 0 ? '+' : ''}${diff} ms`;
+      }
+      if (modeEl) {
+        modeEl.innerText = this.lastDebugData.mode || 'LOCKED';
+        modeEl.style.color = this.lastDebugData.mode === 'LOCKED' ? '#4ade80' : (this.lastDebugData.mode === 'SOFT_NUDGE' ? '#fbbf24' : '#f87171');
+      }
+    }
+  }
+
+  updateFountainProgressUI(progress) {
+    const bar = document.getElementById('fountain-progress-bar');
+    const text = document.getElementById('fountain-progress-text');
+    if (bar) bar.style.width = `${progress.percent}%`;
+    if (text) text.innerText = `光學對齊 (${progress.mode || 'ALIGNING'}): ${progress.percent}%`;
+
+    this.lastDebugData = progress;
+    const locksEl = document.getElementById('db-locks');
+    if (locksEl) locksEl.innerText = `${progress.cycleCount || 0} / 3 (${progress.mode || 'ALIGNING'})`;
+    this.updateDebugHUD(progress.selfM || 0);
   }
 
   renderMasterPartButtons() {
