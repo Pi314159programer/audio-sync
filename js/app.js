@@ -506,8 +506,37 @@ class AppController {
 
       const now = performance.now();
       const periodMs = this.syncEngine.period * 1000;
-      const elapsed = now - this.syncEngine.t0;
-      const offsetInCycle = ((elapsed % periodMs) + periodMs) % periodMs;
+      let elapsed = now - this.syncEngine.t0;
+      let offsetInCycle = ((elapsed % periodMs) + periodMs) % periodMs;
+
+      // Master Self-Correction Protocol: If Master's selfM differs from QR m by > 5ms, adjust masterT0!
+      if (this.role === 'master' && this.qrManager && this.qrManager.dynamicTimer) {
+        const totalFrames = Math.max(1, Math.round(periodMs / 25));
+        const qrFrameM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
+
+        let err = qrFrameM - offsetInCycle;
+        if (err > periodMs / 2) err -= periodMs;
+        if (err < -periodMs / 2) err += periodMs;
+        const absErr = Math.abs(err);
+
+        if (absErr > 5) {
+          if (absErr > 70) {
+            // Rule 1: Hard reset > 70ms
+            this.syncEngine.t0 = now - qrFrameM;
+            this.masterSelfMode = 'HARD_RESET';
+          } else {
+            // Rule 2: Soft nudge <= 70ms (e.g. selfM=97, qrM=25 -> compensates 72ms)
+            this.syncEngine.t0 = this.syncEngine.t0 - (err * 0.6);
+            this.masterSelfMode = 'SOFT_NUDGE';
+          }
+          // Recalculate offset after adjustment
+          elapsed = now - this.syncEngine.t0;
+          offsetInCycle = ((elapsed % periodMs) + periodMs) % periodMs;
+        } else {
+          this.masterSelfMode = 'LOCKED';
+        }
+        this.masterErrMs = Math.round(err);
+      }
 
       // Pulse white ball for 250ms (or 50% of periodMs) at start of each common clock cycle
       const pulseDurationMs = Math.min(250, periodMs * 0.5);
@@ -539,15 +568,14 @@ class AppController {
     if (this.role === 'master') {
       const totalFrames = Math.max(1, Math.round(periodMs / 25));
       const qrFrameM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
-      let qrDiff = Math.abs(selfM - qrFrameM);
-      if (qrDiff > periodMs / 2) qrDiff = periodMs - qrDiff;
+      const err = this.masterErrMs !== undefined ? this.masterErrMs : 0;
 
       if (masterMEl) masterMEl.innerText = `${qrFrameM} ms`;
-      if (slaveMEl) slaveMEl.innerText = `${selfM} ms (Diff: ${qrDiff}ms)`;
-      if (diffMsEl) diffMsEl.innerText = `0 ms [EXACT]`;
+      if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
+      if (diffMsEl) diffMsEl.innerText = `${err > 0 ? '+' : ''}${err} ms (≤5ms)`;
       if (modeEl) {
-        modeEl.innerText = 'MASTER (SYNCED)';
-        modeEl.style.color = '#4ade80';
+        modeEl.innerText = this.masterSelfMode || 'LOCKED';
+        modeEl.style.color = (this.masterSelfMode === 'LOCKED' || !this.masterSelfMode) ? '#4ade80' : (this.masterSelfMode === 'SOFT_NUDGE' ? '#fbbf24' : '#f87171');
       }
     } else {
       if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
