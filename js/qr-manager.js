@@ -82,9 +82,9 @@ export class QRManager {
     const periodSec = this.getPeriodFromRange(payloadObject.range);
     const periodMs = periodSec * 1000;
 
-    // Initialize Fountain Encoder with 130-byte block size for ultra-compact payload
+    // Initialize Fountain Encoder with high-density 800-byte block size for 8x speedup
     if (audioFileBuffer && audioFileBuffer.byteLength > 0) {
-      this.fountainEncoder = new FountainEncoder(audioFileBuffer, fileName, 'audio/mp3', 130);
+      this.fountainEncoder = new FountainEncoder(audioFileBuffer, fileName, 'audio/mp3', 800);
     } else {
       this.fountainEncoder = null;
     }
@@ -110,9 +110,12 @@ export class QRManager {
         seq: this.frameSeq
       };
 
-      // Add Fountain Code Droplet if audio is attached
+      // Add batch of 2 Fountain Code Droplets per frame for 16x accelerated transmission
       if (this.fountainEncoder) {
-        framePayload.f = this.fountainEncoder.nextDroplet();
+        framePayload.f = [
+          this.fountainEncoder.nextDroplet(),
+          this.fountainEncoder.nextDroplet()
+        ];
       }
 
       const jsonStr = JSON.stringify(framePayload);
@@ -135,8 +138,8 @@ export class QRManager {
     };
 
     drawFrame();
-    // Dynamic QR stream (~80ms per frame for high-speed optical transfer)
-    this.dynamicTimer = setInterval(drawFrame, 80);
+    // High FPS dynamic QR stream (~35ms per frame / ~28.5 FPS for 50x accelerated optical transfer)
+    this.dynamicTimer = setInterval(drawFrame, 35);
   }
 
   /**

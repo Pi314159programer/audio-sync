@@ -125,13 +125,23 @@ export class FountainDecoder {
   }
 
   /**
-   * Add a decoded droplet packet
-   * @param {Array|Object} droplet Array [K, seed, degree, b64Data, totalSize] or legacy Object
+   * Add a decoded droplet packet or array batch of droplets
+   * @param {Array|Object} droplet Array batch of droplets or single droplet
    * @returns {{ resolvedCount: number, totalBlocks: number, percent: number, isComplete: boolean }}
    */
   addDroplet(droplet) {
     if (!droplet) return this.getStatus();
 
+    if (Array.isArray(droplet) && Array.isArray(droplet[0])) {
+      droplet.forEach(d => this._processSingleDroplet(d));
+      return this.getStatus();
+    }
+
+    this._processSingleDroplet(droplet);
+    return this.getStatus();
+  }
+
+  _processSingleDroplet(droplet) {
     let K, seed, degree, b64Data, totalSize;
     if (Array.isArray(droplet)) {
       [K, seed, degree, b64Data, totalSize] = droplet;
@@ -143,7 +153,7 @@ export class FountainDecoder {
       totalSize = droplet.s;
     }
 
-    if (!K || !b64Data) return this.getStatus();
+    if (!K || !b64Data) return;
 
     // Convert Base64 data back to Uint8Array
     const binaryStr = atob(b64Data);
@@ -160,7 +170,7 @@ export class FountainDecoder {
 
     // Ignore duplicate droplets by seed
     if (this.processedSeeds.has(seed)) {
-      return this.getStatus();
+      return;
     }
     this.processedSeeds.add(seed);
 
@@ -187,8 +197,6 @@ export class FountainDecoder {
 
     // Cascade belief propagation solver
     this.propagateSolitaryBlocks();
-
-    return this.getStatus();
   }
 
   simplifyDroplet(droplet) {
