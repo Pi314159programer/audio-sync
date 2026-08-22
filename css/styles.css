@@ -617,6 +617,77 @@ html, body {
   border-color: transparent;
 }
 
+/* Common Clock White Pulse Ball Indicator */
+.clk-pulse-ball {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  transition: all 0.05s ease-out;
+  opacity: 0.3;
+  flex-shrink: 0;
+}
+
+.clk-pulse-ball.active {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 0 25px #ffffff, 0 0 50px rgba(255, 255, 255, 0.9) !important;
+  transform: scale(1.2);
+  opacity: 1 !important;
+}
+
+.header-with-clk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.clk-indicator-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.4rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.clk-indicator-text {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.slave-clk-container {
+  position: absolute;
+  top: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(10px);
+  padding: 0.6rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.slave-clk-container .clk-pulse-ball {
+  width: 44px;
+  height: 44px;
+}
+
+.slave-clk-label {
+  font-size: 0.75rem;
+  color: var(--text-main);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
 /* SLAVE FULLSCREEN STATUS DISPLAY VIEW */
 .slave-fullscreen-view {
   width: 100vw;

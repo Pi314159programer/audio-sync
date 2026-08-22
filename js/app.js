@@ -305,6 +305,9 @@ class AppController {
       }, 150);
     }
 
+    // Start common clock visual pulse loop
+    this.startClockPulseLoop();
+
     if (this.role === 'master') {
       this.showView('view-master-control');
       this.renderMasterPartButtons();
@@ -313,6 +316,39 @@ class AppController {
       this.showView('view-slave-status');
       this.updateSlaveUIStatus();
     }
+  }
+
+  startClockPulseLoop() {
+    if (this.clockPulseLoopTimer) {
+      clearTimeout(this.clockPulseLoopTimer);
+      this.clockPulseLoopTimer = null;
+    }
+
+    const scheduleNextVisualPulse = () => {
+      if (!this.syncEngine.isCalibrated) return;
+
+      const delay = this.syncEngine.getTimeToNextCycleStart();
+
+      this.clockPulseLoopTimer = setTimeout(() => {
+        // Flash white ball for 0.5s (500ms) at start of cycle
+        this.triggerVisualClkPulse(500);
+        scheduleNextVisualPulse();
+      }, delay);
+    };
+
+    scheduleNextVisualPulse();
+  }
+
+  triggerVisualClkPulse(durationMs = 500) {
+    const masterBall = document.getElementById('master-clk-ball');
+    const slaveBall = document.getElementById('slave-clk-ball');
+
+    const balls = [masterBall, slaveBall].filter(Boolean);
+    balls.forEach(b => b.classList.add('active'));
+
+    setTimeout(() => {
+      balls.forEach(b => b.classList.remove('active'));
+    }, durationMs);
   }
 
   renderMasterPartButtons() {

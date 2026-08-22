@@ -178,8 +178,16 @@
     <!-- VIEW 6: MASTER CONTROL CONSOLE -->
     <div id="view-master-control" class="panel-card hidden">
       <div class="app-header">
-        <h1 class="app-title">主控操控台</h1>
-        <p class="app-subtitle" id="master-status-indicator">狀態：共用 clk 校正完畢</p>
+        <div class="header-with-clk">
+          <div>
+            <h1 class="app-title">主控操控台</h1>
+            <p class="app-subtitle" id="master-status-indicator">狀態：共用 clk 校正完畢</p>
+          </div>
+          <div class="clk-indicator-wrap" title="共用 clk 脈衝指示器">
+            <div id="master-clk-ball" class="clk-pulse-ball"></div>
+            <span class="clk-indicator-text">clk 脈衝</span>
+          </div>
+        </div>
       </div>
 
       <div class="master-controls">
@@ -213,6 +221,10 @@
 
     <!-- VIEW 7: SLAVE FULLSCREEN STATUS DISPLAY -->
     <div id="view-slave-status" class="slave-fullscreen-view hidden">
+      <div class="slave-clk-container" title="共用 clk 脈衝指示器">
+        <div id="slave-clk-ball" class="clk-pulse-ball"></div>
+        <span class="slave-clk-label">clk 脈衝</span>
+      </div>
       <div id="slave-music-note" class="music-note-icon">🎵</div>
       <div id="slave-part-badge" class="slave-part-badge">第 1 聲部 (已暫停)</div>
     </div>
