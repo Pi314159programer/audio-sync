@@ -4,6 +4,7 @@ import { DSPAnalyzer } from './audio/dsp-analyzer.js';
 import { SyncEngine } from './audio/sync-engine.js';
 import { YouTubePlayerManager } from './youtube-player.js';
 import { QRManager } from './qr-manager.js';
+import { VolumeChart } from './audio/volume-chart.js';
 
 class AppController {
   constructor() {
@@ -13,6 +14,7 @@ class AppController {
     this.syncEngine = new SyncEngine(this.am, this.toneGen, this.dsp);
     this.ytPlayer = new YouTubePlayerManager();
     this.qrManager = new QRManager();
+    this.volumeChart = null;
 
     // App state
     this.role = null; // 'master' or 'slave'
@@ -46,6 +48,7 @@ class AppController {
 
   async init() {
     this.bindDOMEvents();
+    this.volumeChart = new VolumeChart('canvas-528-volume');
     await this.ytPlayer.init('yt-player');
   }
 
@@ -69,6 +72,17 @@ class AppController {
         else el.classList.add('hidden');
       }
     });
+
+    if (viewId === 'view-syncing' && this.volumeChart) {
+      this.volumeChart.start();
+    }
+  }
+
+  updateSyncProgressUI(data) {
+    const bar = document.getElementById('sync-progress-bar');
+    const label = document.getElementById('sync-progress-text');
+    if (bar) bar.style.width = `${data.percent}%`;
+    if (label) label.innerText = `${data.percent}% (${data.elapsedSec} / ${data.totalSec} 秒)`;
   }
 
   bindDOMEvents() {
@@ -132,6 +146,10 @@ class AppController {
       this.showView('view-syncing');
       this.syncEngine.configureRange(this.config.range);
       
+      this.syncEngine.on('syncProgress', (data) => {
+        this.updateSyncProgressUI(data);
+      });
+
       this.syncEngine.on('syncComplete', () => {
         this.onCalibrationCompleted();
       });
@@ -243,6 +261,9 @@ class AppController {
 
     this.dsp.on('pulse528', () => {
       this.showView('view-syncing');
+      this.syncEngine.on('syncProgress', (data) => {
+        this.updateSyncProgressUI(data);
+      });
       this.syncEngine.on('syncComplete', () => {
         this.onCalibrationCompleted();
       });
@@ -397,6 +418,17 @@ class AppController {
   // --- ACOUSTIC COMMAND DETECTION LISTENERS (FOR SLAVES & MASTER) ---
 
   bindDSPCommandListeners() {
+    // 0. Real-time 528Hz Volume Visualizer Update
+    this.dsp.on('energy528Update', (data) => {
+      if (this.volumeChart) {
+        this.volumeChart.addSample(data.energy);
+      }
+      const tag = document.getElementById('volume-current-tag');
+      if (tag) {
+        tag.innerText = `目前音量: ${Math.round(data.energy)}`;
+      }
+    });
+
     // 1. Start Play Command (4000 Hz)
     this.dsp.on('cmdStart', () => {
       const delayToNextCycle = this.syncEngine.getTimeToNextCycleStart();

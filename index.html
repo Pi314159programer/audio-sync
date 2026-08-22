@@ -155,8 +155,24 @@
     <div id="view-syncing" class="panel-card hidden">
       <div class="sync-animation-box">
         <div class="pulse-circle">📡</div>
-        <div class="sync-status-text">正在同步...</div>
-        <div class="sync-subtext">透過耦合振盪器原理進行共用 clk 聲學校正中</div>
+        <div id="sync-status-title" class="sync-status-text">正在同步 (20秒)...</div>
+        <div id="sync-status-sub" class="sync-subtext">透過耦合振盪器原理進行共用 clk 聲學校正中</div>
+        
+        <div class="sync-progress-container">
+          <div id="sync-progress-bar" class="sync-progress-bar-fill"></div>
+        </div>
+        <div id="sync-progress-text" class="sync-progress-label">0% (0.0 / 20.0 秒)</div>
+      </div>
+
+      <!-- Real-time 528Hz Volume Monitor Chart -->
+      <div class="chart-section">
+        <div class="chart-header">
+          <span class="chart-title">📊 528Hz 接收音量即時監測 (10秒視窗)</span>
+          <span id="volume-current-tag" class="volume-badge">目前音量: 0</span>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas id="canvas-528-volume"></canvas>
+        </div>
       </div>
     </div>
 

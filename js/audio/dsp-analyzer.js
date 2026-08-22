@@ -69,6 +69,10 @@ export class DSPAnalyzer {
 
       // 1. Detect 528Hz Sync Pulse
       const energy528 = getFreqEnergy(528);
+
+      // Emit real-time 528Hz energy level update for volume visualizer chart
+      this.emit('energy528Update', { time: now, energy: energy528 });
+
       if (energy528 > 140) { // Threshold
         if (!p528Active) {
           p528Active = true;

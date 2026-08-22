@@ -58,6 +58,10 @@ export class SyncEngine {
    * Start Coupled Oscillator Acoustic Sync Calibration Phase
    * @param {boolean} isMaster 
    */
+  /**
+   * Start Coupled Oscillator Acoustic Sync Calibration Phase (20 seconds total)
+   * @param {boolean} isMaster 
+   */
   async startCalibration(isMaster) {
     this.isMaster = isMaster;
     this.isSyncing = true;
@@ -69,7 +73,22 @@ export class SyncEngine {
 
     const now = performance.now();
     this.t0 = now;
+    this.calibrationStartTime = now;
     this.nextPulseTime = now + 100; // start in 100ms
+
+    // Start progress updater timer (20s total duration)
+    const totalDurationMs = 20000;
+    if (this.progressInterval) clearInterval(this.progressInterval);
+    this.progressInterval = setInterval(() => {
+      if (!this.isSyncing && !this.isLocking) {
+        clearInterval(this.progressInterval);
+        return;
+      }
+      const elapsed = Math.min(totalDurationMs, performance.now() - this.calibrationStartTime);
+      const percent = Math.min(100, Math.floor((elapsed / totalDurationMs) * 100));
+      const elapsedSec = (elapsed / 1000).toFixed(1);
+      this.emit('syncProgress', { elapsedSec, totalSec: 20, percent });
+    }, 100);
 
     // Bind DSP pulse listener for coupled oscillator phase alignment
     this.dsp.on('pulse528', (data) => {
@@ -84,14 +103,19 @@ export class SyncEngine {
       this.nextPulseTime = currentNext + phaseDiff * 0.4;
 
       this.convergenceCount++;
-
-      // Auto-lock check for Master after ~8-12 cycles of alignment
-      if (this.isMaster && this.convergenceCount >= 10) {
-        this.lockCalibrationMaster();
-      }
     });
 
-    // Bind 432Hz lock tone listener
+    // For Master: Timer to transition from 17s pulse phase to 3s lock tone phase (total 20s)
+    if (this.isMaster) {
+      if (this.masterLockTimer) clearTimeout(this.masterLockTimer);
+      this.masterLockTimer = setTimeout(() => {
+        if (this.isSyncing) {
+          this.lockCalibrationMaster();
+        }
+      }, 17000);
+    }
+
+    // Bind 432Hz lock tone listener for Slaves
     this.dsp.on('lock432', () => {
       if (this.isSyncing && !this.isMaster) {
         this.lockCalibrationSlave();
@@ -121,17 +145,22 @@ export class SyncEngine {
   lockCalibrationMaster() {
     if (!this.isSyncing) return;
     this.isSyncing = false;
+    this.isLocking = true;
     if (this.syncLoopTimer) clearTimeout(this.syncLoopTimer);
+    if (this.masterLockTimer) clearTimeout(this.masterLockTimer);
 
     // Play 432Hz 3-second lock tone
     this.toneGen.play432LockTone();
 
-    // After 3s lock tone + 2 cycles, stop emission and complete calibration
+    // After 3s lock tone, complete calibration (17s + 3s = 20s)
     setTimeout(() => {
+      this.isLocking = false;
+      if (this.progressInterval) clearInterval(this.progressInterval);
+      this.emit('syncProgress', { elapsedSec: '20.0', totalSec: 20, percent: 100 });
       this.t0 = performance.now();
       this.isCalibrated = true;
       this.emit('syncComplete');
-    }, 3000 + (this.period * 2000));
+    }, 3000);
   }
 
   /**
@@ -140,14 +169,18 @@ export class SyncEngine {
   lockCalibrationSlave() {
     if (!this.isSyncing) return;
     this.isSyncing = false;
+    this.isLocking = true;
     if (this.syncLoopTimer) clearTimeout(this.syncLoopTimer);
 
-    // Wait 2 cycles after detecting 432Hz tone before stopping pulses & setting dark clock
+    // Wait ~2.7s after detecting 432Hz tone for lock tone phase to complete (total ~20s)
     setTimeout(() => {
+      this.isLocking = false;
+      if (this.progressInterval) clearInterval(this.progressInterval);
+      this.emit('syncProgress', { elapsedSec: '20.0', totalSec: 20, percent: 100 });
       this.t0 = performance.now();
       this.isCalibrated = true;
       this.emit('syncComplete');
-    }, this.period * 2000);
+    }, 2700);
   }
 
   /**
