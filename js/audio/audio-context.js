@@ -36,10 +36,13 @@ export class AudioManager {
   }
 
   /**
-   * Request Microphone Stream for Acoustic Signal Analysis
+   * Request Microphone Stream for Acoustic Signal Analysis with iPadOS Unlocking
    */
   async startMicrophone() {
     await this.init();
+    await this.resume();
+    this.playSilentBuffer();
+
     if (this.micStream) return true;
 
     try {
@@ -55,11 +58,68 @@ export class AudioManager {
 
       this.micSource = this.ctx.createMediaStreamSource(this.micStream);
       this.micSource.connect(this.analyser);
+
+      // Auto-resume if Safari suspends context on iPad
+      if (this.ctx) {
+        this.ctx.onstatechange = () => {
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+          }
+        };
+      }
+
+      this.bindGlobalUnlockListeners();
       return true;
     } catch (err) {
       console.warn("Microphone access permission denied or unavailable:", err);
       return false;
     }
+  }
+
+  /**
+   * Resume AudioContext state if suspended on iOS / iPadOS Safari
+   */
+  async resume() {
+    if (this.ctx && this.ctx.state === 'suspended') {
+      try {
+        await this.ctx.resume();
+      } catch (err) {
+        console.warn("AudioContext resume failed:", err);
+      }
+    }
+  }
+
+  /**
+   * Play 1-sample silent dummy buffer inside user gesture to unlock Safari hardware audio pipeline
+   */
+  playSilentBuffer() {
+    if (!this.ctx) return;
+    try {
+      const buffer = this.ctx.createBuffer(1, 1, 22050);
+      const source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(this.ctx.destination);
+      source.start(0);
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  /**
+   * Bind global touch & click handlers to keep AudioContext active on iPadOS
+   */
+  bindGlobalUnlockListeners() {
+    if (this.unlockBound) return;
+    this.unlockBound = true;
+
+    const unlock = () => {
+      this.resume();
+      this.playSilentBuffer();
+    };
+
+    ['touchstart', 'touchend', 'click', 'pointerdown'].forEach(evtType => {
+      window.addEventListener(evtType, unlock, { passive: true });
+    });
   }
 
   /**
