@@ -265,12 +265,23 @@ class AppController {
         this.renderYTList();
       }
       this.showView('view-master-qr');
-      // Start Optical Dynamic Animated QR Code Generator with Fountain Code Stream
+
+      // Anchor Master's SyncEngine clock grid IMMEDIATELY when QR code generation starts!
+      const masterT0 = performance.now();
+      this.syncEngine.configureRange(this.config.range);
+      this.syncEngine.t0 = masterT0;
+      this.syncEngine.isCalibrated = true;
+
+      // Start Master's live clock pulse loop & Debug HUD updates right away
+      this.startClockPulseLoop();
+
+      // Start Optical Dynamic Animated QR Code Generator with Master's exact t0 anchor
       this.qrManager.startDynamicQR(
         'qrcode-canvas-container',
         this.config,
         this.audioFileBuffer,
-        this.audioFileName
+        this.audioFileName,
+        masterT0
       );
     });
 
@@ -279,10 +290,7 @@ class AppController {
       // Stop optical dynamic QR code animation
       this.qrManager.stopDynamicQR();
 
-      this.syncEngine.configureRange(this.config.range);
-      this.syncEngine.isCalibrated = true;
-      this.syncEngine.t0 = performance.now();
-
+      // Preserve Master's established t0 clock grid anchor
       this.onCalibrationCompleted();
     });
 
@@ -506,8 +514,9 @@ class AppController {
       const isActive = offsetInCycle < pulseDurationMs;
 
       const masterBall = document.getElementById('master-clk-ball');
+      const masterQrBall = document.getElementById('master-qr-clk-ball');
       const slaveBall = document.getElementById('slave-clk-ball');
-      [masterBall, slaveBall].filter(Boolean).forEach(ball => {
+      [masterBall, masterQrBall, slaveBall].filter(Boolean).forEach(ball => {
         if (isActive) ball.classList.add('active');
         else ball.classList.remove('active');
       });

@@ -118,8 +118,16 @@
     <!-- VIEW 3: MASTER QR CODE & SYNC TRIGGER -->
     <div id="view-master-qr" class="panel-card hidden">
       <div class="app-header">
-        <h1 class="app-title">提供裝置掃描</h1>
-        <p class="app-subtitle">請讓非主控者掃描此 Qrcode 進行設定</p>
+        <div class="header-with-clk">
+          <div>
+            <h1 class="app-title">提供裝置掃描</h1>
+            <p class="app-subtitle">請讓非主控者掃描此 Qrcode 進行設定</p>
+          </div>
+          <div class="clk-indicator-wrap" title="共用 clk 脈衝指示器">
+            <div id="master-qr-clk-ball" class="clk-pulse-ball"></div>
+            <span class="clk-indicator-text">clk 脈衝</span>
+          </div>
+        </div>
       </div>
 
       <div class="qr-display-area">

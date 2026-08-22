@@ -60,8 +60,9 @@ export class QRManager {
    * @param {Object} payloadObject Master configuration
    * @param {ArrayBuffer} [audioFileBuffer] Optional uploaded 800KB audio file
    * @param {string} [fileName] Audio file name
+   * @param {number} [masterT0Anchor] Master's exact performance.now() clock anchor
    */
-  startDynamicQR(containerId, payloadObject, audioFileBuffer = null, fileName = 'audio.mp3') {
+  startDynamicQR(containerId, payloadObject, audioFileBuffer = null, fileName = 'audio.mp3', masterT0Anchor = null) {
     this.stopDynamicQR();
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -92,7 +93,8 @@ export class QRManager {
       this.fountainEncoder = null;
     }
 
-    const masterT0 = performance.now();
+    // Anchor Master's QR frame m to the exact masterT0 clock anchor passed from AppController
+    const masterT0 = masterT0Anchor || performance.now();
     this.frameSeq = 0;
 
     const drawFrame = () => {
