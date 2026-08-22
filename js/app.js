@@ -397,6 +397,9 @@ class AppController {
     }
     this.syncEngine.isCalibrated = true;
 
+    // Start Slave's live clock pulse loop & Debug HUD updates right away upon scanning
+    this.startClockPulseLoop();
+
     // Hide scanner, show part selection grid
     document.getElementById('scanner-box').classList.add('hidden');
     document.getElementById('part-selection-box').classList.remove('hidden');
