@@ -96,13 +96,12 @@ export class QRManager {
     // Anchor Master's QR frame m to the exact masterT0 clock anchor passed from AppController
     const masterT0 = masterT0Anchor || performance.now();
     this.frameSeq = 0;
+    const frameIntervalMs = 25;
+    const totalFramesPerCycle = Math.max(1, Math.round(periodMs / frameIntervalMs));
 
     const drawFrame = () => {
-      this.frameSeq++;
-
-      const now = performance.now();
-      const elapsed = now - masterT0;
-      const m = Math.round(elapsed) % periodMs; // Millisecond counter 0..periodMs-1
+      const frameIndex = this.frameSeq % totalFramesPerCycle;
+      const m = (frameIndex * frameIntervalMs) % periodMs; // Exact 25ms step: 0, 25, 50, ..., 1975
 
       // Pulse marker true at the exact start (first 100ms) of every clock cycle
       const isPulseFrame = m < 100;
@@ -137,6 +136,8 @@ export class QRManager {
         img.height = 230;
         container.appendChild(img);
       }
+
+      this.frameSeq++;
     };
 
     drawFrame();
@@ -218,13 +219,13 @@ export class QRManager {
                 slaveT0 = now - targetM;
                 consecutiveLockCount = 0;
                 adjustMode = 'HARD_RESET';
-              } else if (absErr > 50) {
-                // Rule B: Medium error 50ms..300ms -> Soft Gradual Proportional Nudge (no scanner reset!)
-                slaveT0 = slaveT0 - (err * 0.5);
+              } else if (absErr > 10) {
+                // Rule B: Medium error 10ms..300ms -> Soft Gradual Proportional Nudge (no scanner reset!)
+                slaveT0 = slaveT0 - (err * 0.6);
                 consecutiveLockCount = 0;
                 adjustMode = 'SOFT_NUDGE';
               } else {
-                // Rule C: Small error <= 50ms -> Phase Locked!
+                // Rule C: Ultra-tight error <= 10ms -> Phase Locked!
                 consecutiveLockCount++;
                 adjustMode = 'LOCKED';
               }

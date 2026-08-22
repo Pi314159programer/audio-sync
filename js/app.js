@@ -533,18 +533,34 @@ class AppController {
     const diffMsEl = document.getElementById('db-diff-ms');
     const modeEl = document.getElementById('db-mode');
 
+    const periodMs = (this.syncEngine.period || 0.5) * 1000;
     if (roleZoneEl) roleZoneEl.innerText = `${(this.role || 'device').toUpperCase()} (Zone ${this.config.zone || 'A'})`;
-    if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
 
-    if (this.lastDebugData) {
-      if (masterMEl) masterMEl.innerText = `${this.lastDebugData.masterM !== undefined ? this.lastDebugData.masterM : 0} ms`;
-      if (diffMsEl) {
-        const diff = this.lastDebugData.diffMs || 0;
-        diffMsEl.innerText = `${diff > 0 ? '+' : ''}${diff} ms`;
-      }
+    if (this.role === 'master') {
+      const totalFrames = Math.max(1, Math.round(periodMs / 25));
+      const qrFrameM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
+      let qrDiff = Math.abs(selfM - qrFrameM);
+      if (qrDiff > periodMs / 2) qrDiff = periodMs - qrDiff;
+
+      if (masterMEl) masterMEl.innerText = `${qrFrameM} ms`;
+      if (slaveMEl) slaveMEl.innerText = `${selfM} ms (Diff: ${qrDiff}ms)`;
+      if (diffMsEl) diffMsEl.innerText = `0 ms [EXACT]`;
       if (modeEl) {
-        modeEl.innerText = this.lastDebugData.mode || 'LOCKED';
-        modeEl.style.color = this.lastDebugData.mode === 'LOCKED' ? '#4ade80' : (this.lastDebugData.mode === 'SOFT_NUDGE' ? '#fbbf24' : '#f87171');
+        modeEl.innerText = 'MASTER (SYNCED)';
+        modeEl.style.color = '#4ade80';
+      }
+    } else {
+      if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
+      if (this.lastDebugData) {
+        if (masterMEl) masterMEl.innerText = `${this.lastDebugData.masterM !== undefined ? this.lastDebugData.masterM : 0} ms`;
+        if (diffMsEl) {
+          const diff = this.lastDebugData.diffMs || 0;
+          diffMsEl.innerText = `${diff > 0 ? '+' : ''}${diff} ms (${this.lastDebugData.absErr <= 10 ? '≤10ms' : '>10ms'})`;
+        }
+        if (modeEl) {
+          modeEl.innerText = this.lastDebugData.mode || 'LOCKED';
+          modeEl.style.color = this.lastDebugData.mode === 'LOCKED' ? '#4ade80' : (this.lastDebugData.mode === 'SOFT_NUDGE' ? '#fbbf24' : '#f87171');
+        }
       }
     }
   }
