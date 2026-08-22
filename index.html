@@ -79,13 +79,11 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="select-5tones">校正 5 音設定</label>
-        <select id="select-5tones" class="form-select">
-          <option value="pentatonic" selected>經典五音「宮商角徵羽」(C4,D4,E4,G4,A4)</option>
-          <option value="healing">療癒頻率 (432, 528, 639, 741, 852 Hz)</option>
-          <option value="rainbow">彩虹五階 (C4, E4, G4, B4, D5)</option>
-          <option value="chords">和弦五階 (A3, C4, E4, A4, E5)</option>
-        </select>
+        <label class="form-label" for="input-audio-file">
+          <span>校正音檔上傳 (選擇性，800 KB 以內)</span>
+          <span id="audio-file-badge" style="font-size:0.75rem; color:var(--text-muted);">未選擇檔案</span>
+        </label>
+        <input type="file" id="input-audio-file" class="form-input" accept="audio/*">
       </div>
 
       <div class="form-group">
@@ -128,8 +126,17 @@
       </div>
 
       <!-- Camera Scanner Container -->
-      <div id="scanner-box" class="scanner-viewport">
+      <div id="scanner-box" class="form-group">
         <div id="reader"></div>
+        <div id="fountain-progress-container" class="hidden" style="margin-top:1rem; width:100%;">
+          <div style="font-size:0.8rem; color:var(--text-main); margin-bottom:0.3rem; display:flex; justify-content:space-between; font-weight:600;">
+            <span>📡 光學噴泉碼重組進度</span>
+            <span id="fountain-progress-text" style="color:var(--accent-cyan);">0% (0 / 0 封包)</span>
+          </div>
+          <div style="height:10px; background:rgba(255,255,255,0.1); border-radius:5px; overflow:hidden;">
+            <div id="fountain-progress-bar" style="width: 0%; height:100%; background:linear-gradient(90deg, #00f2fe, #4facfe); transition:width 0.15s ease-out;"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Fallback Input Toggle -->

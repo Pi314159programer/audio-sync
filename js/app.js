@@ -39,6 +39,9 @@ class AppController {
     this.partStates = {}; // { 1: true, 2: true, ... } true=playing, false=muted
     this.pauseSyncTimer = null;
     this.seekWasAdjusted = false;
+    this.audioFileBuffer = null;
+    this.audioFileName = '';
+    this.reconstructedAudioFile = null;
 
     // Voice Part Color Mapping
     this.partColors = {
@@ -93,6 +96,13 @@ class AppController {
     if (label) label.innerText = `${data.percent}% (${data.elapsedSec} / ${data.totalSec} 秒)`;
   }
 
+  updateFountainProgressUI(progress) {
+    const bar = document.getElementById('fountain-progress-bar');
+    const text = document.getElementById('fountain-progress-text');
+    if (bar) bar.style.width = `${progress.percent}%`;
+    if (text) text.innerText = `${progress.percent}% (${progress.resolvedCount} / ${progress.totalBlocks} 封包)`;
+  }
+
   bindDOMEvents() {
     // 1. Role Selection
     document.getElementById('btn-select-master').addEventListener('click', async () => {
@@ -105,7 +115,15 @@ class AppController {
       this.role = 'slave';
       await this.am.init();
       this.showView('view-slave-setup');
-      this.qrManager.startScanner('reader', (data) => this.onSlaveQRScanned(data));
+
+      const progBox = document.getElementById('fountain-progress-container');
+      if (progBox) progBox.classList.remove('hidden');
+
+      this.qrManager.startScanner(
+        'reader',
+        (data, reconstructedFile) => this.onSlaveQRScanned(data, reconstructedFile),
+        (progress) => this.updateFountainProgressUI(progress)
+      );
     });
 
     // 2. Master Setup Controls
@@ -115,13 +133,13 @@ class AppController {
       const zoneBadge = document.getElementById('range-zone-badge');
       if (['10m','20m','50m'].includes(this.config.range)) {
         this.config.zone = 'A';
-        zoneBadge.innerText = '區間 A (周期 0.5s)';
+        zoneBadge.innerText = '區間 A (2Hz / 周期 0.5s)';
       } else if (['70m','100m'].includes(this.config.range)) {
         this.config.zone = 'B';
-        zoneBadge.innerText = '區間 B (周期 1.0s)';
+        zoneBadge.innerText = '區間 B (1Hz / 周期 1.0s)';
       } else {
         this.config.zone = 'C';
-        zoneBadge.innerText = '區間 C (周期 2.0s)';
+        zoneBadge.innerText = '區間 C (0.5Hz / 周期 2.0s)';
       }
     });
 
@@ -129,11 +147,33 @@ class AppController {
       this.config.partCount = parseInt(e.target.value);
     });
 
-    const tonesSelect = document.getElementById('select-5tones');
-    if (tonesSelect) {
-      tonesSelect.addEventListener('change', (e) => {
-        const key = e.target.value;
-        this.config.tones = this.tonePresets[key] || this.tonePresets.pentatonic;
+    const audioFileInput = document.getElementById('input-audio-file');
+    if (audioFileInput) {
+      audioFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        const badge = document.getElementById('audio-file-badge');
+        if (file) {
+          if (file.size > 800 * 1024) {
+            alert('檔案大小超過 800 KB 限制，請重新選擇較小的音檔！');
+            audioFileInput.value = '';
+            this.audioFileBuffer = null;
+            this.audioFileName = '';
+            if (badge) badge.innerText = '檔案過大 (>800KB)';
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            this.audioFileBuffer = evt.target.result;
+            this.audioFileName = file.name;
+            const sizeKb = Math.round(file.size / 1024);
+            if (badge) badge.innerText = `已載入: ${file.name} (${sizeKb} KB)`;
+          };
+          reader.readAsArrayBuffer(file);
+        } else {
+          this.audioFileBuffer = null;
+          this.audioFileName = '';
+          if (badge) badge.innerText = '未選擇檔案';
+        }
       });
     }
 
@@ -154,8 +194,13 @@ class AppController {
         this.renderYTList();
       }
       this.showView('view-master-qr');
-      // Start Optical Dynamic Animated QR Code Generator
-      this.qrManager.startDynamicQR('qrcode-canvas-container', this.config);
+      // Start Optical Dynamic Animated QR Code Generator with Fountain Code Stream
+      this.qrManager.startDynamicQR(
+        'qrcode-canvas-container',
+        this.config,
+        this.audioFileBuffer,
+        this.audioFileName
+      );
     });
 
     // 3. Master Sync Trigger Button (Direct View Transition)
@@ -181,7 +226,7 @@ class AppController {
       try {
         const rawData = JSON.parse(jsonStr);
         const data = this.qrManager.decompressPayload(rawData);
-        this.onSlaveQRScanned(data);
+        this.onSlaveQRScanned(data, null);
       } catch (err) {
         alert("格式錯誤，請確定輸入的是正確的 JSON 設定數據");
       }
@@ -237,8 +282,9 @@ class AppController {
     });
   }
 
-  onSlaveQRScanned(data) {
+  onSlaveQRScanned(data, reconstructedFile) {
     this.config = data;
+    this.reconstructedAudioFile = reconstructedFile;
     this.syncEngine.configureRange(this.config.range);
 
     // Perform Optical Clock Alignment from Dynamic QR Frame
@@ -269,7 +315,7 @@ class AppController {
         btn.classList.add('selected');
         this.assignedPart = i;
 
-        // Transition directly to Full White Interface (View 8) for 5-tone tap verification
+        // Transition directly to Full White Interface (View 8) for audio tap verification
         this.showView('view-white-screen');
         this.setupSlaveWhiteScreenTap();
       });
@@ -281,6 +327,13 @@ class AppController {
     const whiteView = document.getElementById('view-white-screen');
     if (!whiteView) return;
 
+    const subtext = document.querySelector('.white-screen-subtext');
+    if (subtext) {
+      subtext.innerText = this.reconstructedAudioFile
+        ? '✨ 光學噴泉碼重組成功！請點擊螢幕任意處播放傳輸音檔驗證'
+        : '✨ 光學同步完成！請點擊螢幕任意處進入狀態介面';
+    }
+
     let hasTapped = false;
     const onTap = async () => {
       if (hasTapped) return;
@@ -288,14 +341,27 @@ class AppController {
       whiteView.removeEventListener('click', onTap);
       whiteView.removeEventListener('touchstart', onTap);
 
-      const subtext = document.querySelector('.white-screen-subtext');
-      if (subtext) subtext.innerText = '🎵 正在發出傳輸之 5 音驗證中...';
-
       await this.am.init();
-      const tones = this.config.tones || [261, 293, 329, 392, 440];
-      this.toneGen.playFiveTones(tones, () => {
+
+      if (this.reconstructedAudioFile && this.reconstructedAudioFile.buffer) {
+        if (subtext) subtext.innerText = '🎵 正在播放主控者上傳之音檔中...';
+        try {
+          const ctx = this.am.ctx;
+          const audioBuffer = await ctx.decodeAudioData(this.reconstructedAudioFile.buffer.slice(0));
+          const source = ctx.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(ctx.destination);
+          source.onended = () => {
+            this.onCalibrationCompleted();
+          };
+          source.start(0);
+        } catch (err) {
+          console.warn("Could not decode reconstructed audio file, proceeding to status:", err);
+          this.onCalibrationCompleted();
+        }
+      } else {
         this.onCalibrationCompleted();
-      });
+      }
     };
 
     whiteView.addEventListener('click', onTap);
