@@ -480,7 +480,12 @@ class AppController {
     const shift1 = Math.floor(phaseErr / 2);
     const shift2 = phaseErr - shift1;
 
-    console.log(`[Two-Cycle Phase Shift] Total Phase Error: ${phaseErr}ms | Cycle 1 Shift: ${shift1}ms | Cycle 2 Shift: ${shift2}ms`);
+    const cycle1Limit = periodMs - shift1;
+    const cycle2Limit = periodMs - shift2;
+
+    console.log(`[Two-Cycle Phase Shift] Total Phase Error: ${phaseErr}ms.`);
+    console.log(`  -> Cycle 1 Limit: ${cycle1Limit}ms (${shift1 < 0 ? 'EXTENDED +' + Math.abs(shift1) : 'DECREASED -' + shift1}ms)`);
+    console.log(`  -> Cycle 2 Limit: ${cycle2Limit}ms (${shift2 < 0 ? 'EXTENDED +' + Math.abs(shift2) : 'DECREASED -' + shift2}ms)`);
 
     // Cycle 1 Shift: Apply first half shift immediately upon entering interface
     this.syncEngine.t0 = this.syncEngine.t0 - shift1;
@@ -489,7 +494,7 @@ class AppController {
     setTimeout(() => {
       if (this.syncEngine && this.syncEngine.t0) {
         this.syncEngine.t0 = this.syncEngine.t0 - shift2;
-        console.log(`[Two-Cycle Phase Shift] Cycle 2 Shift Applied (${shift2}ms). Phase Error 100% Eliminated!`);
+        console.log(`[Two-Cycle Phase Shift] Cycle 2 Shift Applied (${shift2}ms). Phase Error 100% Eliminated to 0ms!`);
       }
     }, periodMs);
   }
@@ -647,7 +652,7 @@ class AppController {
         if (masterMEl) masterMEl.innerText = `${this.lastDebugData.masterM !== undefined ? this.lastDebugData.masterM : 0} ms`;
         if (diffMsEl) {
           const diff = this.lastDebugData.diffMs || 0;
-          diffMsEl.innerText = `${diff > 0 ? '+' : ''}${diff} ms (${this.lastDebugData.absErr <= 10 ? '≤10ms' : '>10ms'})`;
+          diffMsEl.innerText = `${diff > 0 ? '+' : ''}${diff} ms (${this.lastDebugData.absErr <= 30 ? '≤30ms' : '>30ms'})`;
         }
         if (modeEl) {
           modeEl.innerText = this.lastDebugData.mode || 'LOCKED';

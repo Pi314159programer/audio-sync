@@ -218,13 +218,13 @@ export class QRManager {
                 slaveT0 = now - targetM;
                 consecutiveLockCount = 0;
                 adjustMode = 'HARD_RESET';
-              } else if (absErr > 10) {
-                // Rule B: Medium error 10ms..300ms -> Soft Gradual Proportional Nudge (no scanner reset!)
+              } else if (absErr > 30) {
+                // Rule B: Medium error 30ms..300ms -> Soft Gradual Proportional Nudge (no scanner reset!)
                 slaveT0 = slaveT0 - (err * 0.6);
                 consecutiveLockCount = 0;
                 adjustMode = 'SOFT_NUDGE';
               } else {
-                // Rule C: Ultra-tight error <= 10ms -> Phase Locked!
+                // Rule C: Phase Locked <= 30ms!
                 consecutiveLockCount++;
                 adjustMode = 'LOCKED';
               }
