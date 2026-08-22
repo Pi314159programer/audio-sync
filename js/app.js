@@ -322,6 +322,11 @@ class AppController {
       const targetSec = parseFloat(seekSlider.value);
       this.ytPlayer.seekTo(targetSec);
       document.getElementById('time-current').innerText = this.formatTime(targetSec);
+
+      // Automatically pause playback and transmit 5000Hz acoustic pause signal on next clk cycle
+      if (this.isPlaying) {
+        this.triggerMasterPause();
+      }
     });
 
     // 6. Bind DSP Analyzer Events for Slave acoustic commands
@@ -358,8 +363,10 @@ class AppController {
     this.reconstructedAudioFile = reconstructedFile;
     this.syncEngine.configureRange(this.config.range);
 
-    // Perform Optical Clock Alignment from Dynamic QR Frame
-    if (data.clk && data.scanTime) {
+    // Perform High-Precision Multi-Cycle Optical Clock Alignment from Dynamic QR Stream
+    if (data.alignedT0) {
+      this.syncEngine.t0 = data.alignedT0;
+    } else if (data.clk && data.scanTime) {
       const periodMs = this.syncEngine.period * 1000;
       const localTimeOffset = performance.now() - data.scanTime;
       const estimatedMasterNow = data.clk + localTimeOffset;
@@ -562,6 +569,12 @@ class AppController {
   // --- MASTER CONTROL SIGNAL TRANSMISSION ---
 
   triggerMasterPlay() {
+    if (this.isPlayTransitioning) return;
+    this.isPlayTransitioning = true;
+
+    const playBtn = document.getElementById('btn-play-pause');
+    if (playBtn) playBtn.disabled = true;
+
     // Stop continuous pause sync loop
     this.stopPauseProgressLoop();
 
@@ -583,7 +596,11 @@ class AppController {
       setTimeout(() => {
         this.isPlaying = true;
         this.ytPlayer.play();
-        document.getElementById('btn-play-pause').innerText = '⏸️';
+        if (playBtn) {
+          playBtn.innerText = '⏸️';
+          playBtn.disabled = false;
+        }
+        this.isPlayTransitioning = false;
       }, delayToNextCycle + periodMs);
     }, 3000);
   }

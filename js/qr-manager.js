@@ -97,6 +97,7 @@ export class QRManager {
 
       const now = performance.now();
       const elapsed = now - masterT0;
+      const cycleIndex = Math.floor(elapsed / periodMs);
       const offsetInCycle = ((elapsed % periodMs) + periodMs) % periodMs;
 
       // Pulse marker true at the exact start (first 100ms) of every clock cycle
@@ -106,6 +107,7 @@ export class QRManager {
         ...baseCompact,
         per: periodSec,
         clk: Math.round(now),
+        cyc: cycleIndex,
         pulse: isPulseFrame ? 1 : 0,
         seq: this.frameSeq
       };
@@ -152,13 +154,16 @@ export class QRManager {
   /**
    * Start Camera Scanner for Slave Device
    * @param {string} readerElementId
-   * @param {Function} onScanSuccess Called when all data & Fountain Code file are reconstructed
-   * @param {Function} onScanProgress Called on every frame with reconstruction progress %
+   * @param {Function} onScanSuccess Called when all data & Fountain Code file are reconstructed & min 3 clock cycles phase-locked
+   * @param {Function} onScanProgress Called on every frame with reconstruction & clock phase progress %
    */
   async startScanner(readerElementId, onScanSuccess, onScanProgress) {
     this.fountainDecoder.reset();
     let hasCompleted = false;
     let decodedConfig = null;
+
+    const observedCycles = new Set();
+    const phaseEstimates = [];
 
     if (window.Html5Qrcode) {
       this.html5QrCode = new window.Html5Qrcode(readerElementId);
@@ -180,31 +185,65 @@ export class QRManager {
               const scanTime = performance.now();
               const rawData = JSON.parse(decodedText);
               decodedConfig = this.decompressPayload(rawData);
+
+              // Perform multi-cycle clock phase alignment
+              if (rawData.cyc !== undefined) {
+                observedCycles.add(rawData.cyc);
+              }
+
+              const periodMs = (decodedConfig.period || 0.5) * 1000;
+              const masterNow = decodedConfig.clk;
+              const masterCycleOffset = masterNow % periodMs;
+              const estimatedLocalT0 = scanTime - masterCycleOffset;
+
+              phaseEstimates.push(estimatedLocalT0);
+              if (phaseEstimates.length > 20) phaseEstimates.shift();
+
+              // Calculate smoothed local t0 anchor
+              const avgLocalT0 = phaseEstimates.reduce((a, b) => a + b, 0) / phaseEstimates.length;
               decodedConfig.scanTime = scanTime;
+              decodedConfig.alignedT0 = avgLocalT0;
+
+              const cycleCount = observedCycles.size;
+              const cycleProgress = Math.min(100, Math.floor((cycleCount / 3) * 100));
 
               // Process Fountain Code droplet if present
               if (rawData.f) {
                 const status = this.fountainDecoder.addDroplet(rawData.f);
+                const overallPercent = Math.min(status.percent, cycleProgress);
+
                 if (onScanProgress) {
                   onScanProgress({
-                    percent: status.percent,
+                    percent: overallPercent,
                     resolvedCount: status.resolvedCount,
-                    totalBlocks: status.totalBlocks
+                    totalBlocks: status.totalBlocks,
+                    cycleCount: cycleCount
                   });
                 }
 
-                if (status.isComplete) {
+                // Completion requires BOTH Fountain file reconstruction AND min 3 cycles phase alignment
+                if (status.isComplete && cycleCount >= 3) {
                   hasCompleted = true;
                   const reconstructedFile = this.fountainDecoder.getReconstructedFile();
                   this.stopScanner();
                   onScanSuccess(decodedConfig, reconstructedFile);
                 }
               } else {
-                // If no audio file attached, complete immediately on first frame
-                hasCompleted = true;
-                if (onScanProgress) onScanProgress({ percent: 100, resolvedCount: 1, totalBlocks: 1 });
-                this.stopScanner();
-                onScanSuccess(decodedConfig, null);
+                // If no audio file attached, completion requires min 3 distinct clock cycles phase-lock
+                if (onScanProgress) {
+                  onScanProgress({
+                    percent: cycleProgress,
+                    resolvedCount: cycleCount,
+                    totalBlocks: 3,
+                    cycleCount: cycleCount
+                  });
+                }
+
+                if (cycleCount >= 3) {
+                  hasCompleted = true;
+                  this.stopScanner();
+                  onScanSuccess(decodedConfig, null);
+                }
               }
             } catch (err) {
               console.warn("Invalid dynamic QR frame payload:", decodedText);
