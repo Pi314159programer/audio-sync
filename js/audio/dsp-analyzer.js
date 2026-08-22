@@ -39,15 +39,20 @@ export class DSPAnalyzer {
 
     const binWidth = sampleRate / fftSize;
 
-    // Helper to get amplitude at target frequency
+    // Helper to get peak energy amplitude around target frequency (5-bin peak search)
     const getFreqEnergy = (targetFreq) => {
-      const binIndex = Math.round(targetFreq / binWidth);
-      if (binIndex < 0 || binIndex >= bufferLength) return 0;
-      // Average surrounding 3 bins for robustness
-      const b0 = dataArray[Math.max(0, binIndex - 1)];
-      const b1 = dataArray[binIndex];
-      const b2 = dataArray[Math.min(bufferLength - 1, binIndex + 1)];
-      return (b0 + b1 * 2 + b2) / 4;
+      const centerIndex = Math.round(targetFreq / binWidth);
+      if (centerIndex < 0 || centerIndex >= bufferLength) return 0;
+
+      let maxE = 0;
+      for (let offset = -2; offset <= 2; offset++) {
+        const idx = centerIndex + offset;
+        if (idx >= 0 && idx < bufferLength) {
+          const val = dataArray[idx];
+          if (val > maxE) maxE = val;
+        }
+      }
+      return maxE;
     };
 
     let p528Active = false;

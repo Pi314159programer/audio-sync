@@ -22,20 +22,9 @@ export class VolumeChart {
     this.currentEnergy = 0;
     this.threshold = 140;
 
-    this.initCanvasSize();
-    window.addEventListener('resize', () => this.initCanvasSize());
-  }
-
-  initCanvasSize() {
-    if (!this.canvas) return;
-    const rect = this.canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    this.width = rect.width || 520;
-    this.height = rect.height || 180;
-
-    this.canvas.width = this.width * dpr;
-    this.canvas.height = this.height * dpr;
-    this.ctx.scale(dpr, dpr);
+    window.addEventListener('resize', () => {
+      this.lastRectWidth = 0; // Force resize check on window resize
+    });
   }
 
   /**
@@ -80,20 +69,39 @@ export class VolumeChart {
     const now = performance.now();
     this.pruneOldData(now);
 
+    // Measure actual rendered canvas size from DOM
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return; // Skip if element is hidden (display: none)
+
+    const dpr = window.devicePixelRatio || 1;
+    const targetPixelWidth = Math.floor(rect.width * dpr);
+    const targetPixelHeight = Math.floor(rect.height * dpr);
+
+    if (this.canvas.width !== targetPixelWidth || this.canvas.height !== targetPixelHeight) {
+      this.canvas.width = targetPixelWidth;
+      this.canvas.height = targetPixelHeight;
+    }
+
+    this.width = rect.width;
+    this.height = rect.height;
+
+    // Reset matrix & scale for crisp high-DPI rendering
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
     const w = this.width;
     const h = this.height;
 
     const paddingLeft = 45;
     const paddingRight = 15;
-    const paddingTop = 25;
+    const paddingTop = 22;
     const paddingBottom = 30;
 
-    const plotWidth = w - paddingLeft - paddingRight;
-    const plotHeight = h - paddingTop - paddingBottom;
+    const plotWidth = Math.max(10, w - paddingLeft - paddingRight);
+    const plotHeight = Math.max(10, h - paddingTop - paddingBottom);
 
     // Clear background
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(10, 14, 23, 0.85)';
+    ctx.fillStyle = '#0a0e17';
     ctx.fillRect(0, 0, w, h);
 
     // Draw Grid & Axes Lines
@@ -165,70 +173,73 @@ export class VolumeChart {
     ctx.fillText('門檻 140', w - paddingRight - 4, thresholdY - 2);
     ctx.restore();
 
-    // Plot 528Hz Energy Waveform Curve
-    if (this.dataHistory.length > 0) {
-      const windowMs = 10000;
-      const startTime = now - windowMs;
+    // Plot 528Hz Energy Waveform Curve (10s Window)
+    const windowMs = 10000;
+    const startTime = now - windowMs;
 
-      ctx.save();
-      ctx.beginPath();
+    const validSamples = this.dataHistory.filter(d => d.time >= startTime);
+    const points = [];
 
-      const points = [];
-      for (let i = 0; i < this.dataHistory.length; i++) {
-        const pt = this.dataHistory[i];
-        const relTime = pt.time - startTime;
-        const x = paddingLeft + (relTime / windowMs) * plotWidth;
-        const y = paddingTop + (1 - Math.min(255, pt.energy) / 255) * plotHeight;
-        points.push({ x, y, energy: pt.energy });
-      }
+    // Always start curve at x = paddingLeft (t = -10s)
+    const startEnergy = validSamples.length > 0 ? validSamples[0].energy : 0;
+    points.push({
+      x: paddingLeft,
+      y: paddingTop + (1 - Math.min(255, startEnergy) / 255) * plotHeight,
+      energy: startEnergy
+    });
 
-      // If missing data at start/end, add boundary points for clean display
-      if (points.length > 0) {
-        const firstPt = points[0];
-        if (firstPt.x > paddingLeft) {
-          points.unshift({ x: paddingLeft, y: firstPt.y, energy: firstPt.energy });
-        }
-        const lastPt = points[points.length - 1];
-        if (lastPt.x < paddingLeft + plotWidth) {
-          points.push({ x: paddingLeft + plotWidth, y: lastPt.y, energy: lastPt.energy });
-        }
-      }
-
-      // Draw Path
-      ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
-      }
-
-      // Stroke Line with Glow Effect
-      ctx.strokeStyle = '#06b6d4'; // Cyan
-      ctx.lineWidth = 2.5;
-      ctx.shadowColor = '#06b6d4';
-      ctx.shadowBlur = 10;
-      ctx.stroke();
-
-      // Fill Gradient Area Under Curve
-      const fillPath = new Path2D();
-      fillPath.moveTo(paddingLeft, h - paddingBottom);
-      points.forEach(p => fillPath.lineTo(p.x, p.y));
-      fillPath.lineTo(paddingLeft + plotWidth, h - paddingBottom);
-      fillPath.closePath();
-
-      const grad = ctx.createLinearGradient(0, paddingTop, 0, h - paddingBottom);
-      grad.addColorStop(0, 'rgba(6, 182, 212, 0.35)');
-      grad.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
-      ctx.fillStyle = grad;
-      ctx.shadowBlur = 0;
-      ctx.fill(fillPath);
-
-      // Draw current value indicator dot at the latest point
-      const lastPoint = points[points.length - 1];
-      ctx.fillStyle = this.currentEnergy > this.threshold ? '#10b981' : '#06b6d4';
-      ctx.beginPath();
-      ctx.arc(lastPoint.x, lastPoint.y, 5, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.restore();
+    // Add all samples recorded in the 10s window
+    for (let i = 0; i < validSamples.length; i++) {
+      const pt = validSamples[i];
+      const relTime = pt.time - startTime;
+      const x = paddingLeft + (relTime / windowMs) * plotWidth;
+      const y = paddingTop + (1 - Math.min(255, pt.energy) / 255) * plotHeight;
+      points.push({ x, y, energy: pt.energy });
     }
+
+    // Always end curve at x = paddingLeft + plotWidth (t = 0s / now)
+    const endEnergy = validSamples.length > 0 ? validSamples[validSamples.length - 1].energy : this.currentEnergy;
+    points.push({
+      x: paddingLeft + plotWidth,
+      y: paddingTop + (1 - Math.min(255, endEnergy) / 255) * plotHeight,
+      energy: endEnergy
+    });
+
+    // Draw Continuous Waveform Line
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      ctx.lineTo(points[i].x, points[i].y);
+    }
+
+    ctx.strokeStyle = '#06b6d4'; // Cyan
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#06b6d4';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+
+    // Fill Area Under Waveform
+    const fillPath = new Path2D();
+    fillPath.moveTo(paddingLeft, paddingTop + plotHeight);
+    points.forEach(p => fillPath.lineTo(p.x, p.y));
+    fillPath.lineTo(paddingLeft + plotWidth, paddingTop + plotHeight);
+    fillPath.closePath();
+
+    const grad = ctx.createLinearGradient(0, paddingTop, 0, paddingTop + plotHeight);
+    grad.addColorStop(0, 'rgba(6, 182, 212, 0.35)');
+    grad.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+    ctx.fillStyle = grad;
+    ctx.shadowBlur = 0;
+    ctx.fill(fillPath);
+
+    // Draw current volume dot on the right edge
+    const lastPoint = points[points.length - 1];
+    ctx.fillStyle = endEnergy > this.threshold ? '#10b981' : '#06b6d4';
+    ctx.beginPath();
+    ctx.arc(lastPoint.x, lastPoint.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
   }
 }

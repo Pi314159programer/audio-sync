@@ -144,6 +144,11 @@ class AppController {
     // 3. Master Sync Trigger Button
     document.getElementById('btn-start-sync-master').addEventListener('click', async () => {
       this.showView('view-syncing');
+      const titleEl = document.getElementById('sync-status-title');
+      const subEl = document.getElementById('sync-status-sub');
+      if (titleEl) titleEl.innerText = '正在同步 (20秒)...';
+      if (subEl) subEl.innerText = '透過耦合振盪器原理進行共用 clk 聲學校正中';
+
       this.syncEngine.configureRange(this.config.range);
       
       this.syncEngine.on('syncProgress', (data) => {
@@ -256,18 +261,29 @@ class AppController {
   }
 
   async listenForSlaveCalibration() {
+    this.showView('view-syncing');
+    const titleEl = document.getElementById('sync-status-title');
+    const subEl = document.getElementById('sync-status-sub');
+    if (titleEl) titleEl.innerText = '等待主控者聲學脈衝...';
+    if (subEl) subEl.innerText = `已選擇第 ${this.assignedPart} 聲部，請等待主控者按下「同步」發起校正`;
+
     await this.am.startMicrophone();
     this.dsp.start();
 
+    let slaveCalibrationStarted = false;
     this.dsp.on('pulse528', () => {
-      this.showView('view-syncing');
-      this.syncEngine.on('syncProgress', (data) => {
-        this.updateSyncProgressUI(data);
-      });
-      this.syncEngine.on('syncComplete', () => {
-        this.onCalibrationCompleted();
-      });
-      this.syncEngine.startCalibration(false);
+      if (!slaveCalibrationStarted) {
+        slaveCalibrationStarted = true;
+        if (titleEl) titleEl.innerText = '正在同步 (20秒)...';
+        if (subEl) subEl.innerText = '透過耦合振盪器原理進行共用 clk 聲學校正中';
+        this.syncEngine.on('syncProgress', (data) => {
+          this.updateSyncProgressUI(data);
+        });
+        this.syncEngine.on('syncComplete', () => {
+          this.onCalibrationCompleted();
+        });
+        this.syncEngine.startCalibration(false);
+      }
     });
   }
 
