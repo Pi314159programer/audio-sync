@@ -439,7 +439,7 @@ class AppController {
     whiteView.addEventListener('touchstart', onTap);
   }
 
-  onCalibrationCompleted() {
+  async onCalibrationCompleted() {
     // Initialize voice part default states (all enabled = true)
     for (let i = 1; i <= Math.max(8, this.config.partCount); i++) {
       this.partStates[i] = true;
@@ -455,6 +455,16 @@ class AppController {
         this.ytPlayer.pause();
         this.ytPlayer.unmute();
       }, 150);
+    }
+
+    // Start microphone & DSP Analyzer on Slave device so it receives acoustic play/pause signals
+    if (this.role === 'slave') {
+      try {
+        await this.am.startMicrophone();
+        this.dsp.start();
+      } catch (err) {
+        console.warn("Could not start microphone on slave device:", err);
+      }
     }
 
     // Start common clock visual pulse loop
@@ -484,8 +494,8 @@ class AppController {
       const elapsed = now - this.syncEngine.t0;
       const offsetInCycle = ((elapsed % periodMs) + periodMs) % periodMs;
 
-      // Pulse white ball for 0.5s (500ms) at start of each common clock cycle
-      const pulseDurationMs = Math.min(500, periodMs);
+      // Pulse white ball for 250ms (or 50% of periodMs) at start of each common clock cycle
+      const pulseDurationMs = Math.min(250, periodMs * 0.5);
       const isActive = offsetInCycle < pulseDurationMs;
 
       const masterBall = document.getElementById('master-clk-ball');
