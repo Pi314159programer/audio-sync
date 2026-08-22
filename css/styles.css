@@ -286,12 +286,14 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 254px;
+  min-height: 254px;
 }
 
 #qrcode-canvas-container canvas, #qrcode-canvas-container img {
-  max-width: 220px;
-  max-height: 220px;
-  display: block;
+  width: 230px !important;
+  height: 230px !important;
+  display: block !important;
 }
 
 /* Scanner & Code Input Box */

@@ -71,8 +71,8 @@ export class FountainEncoder {
   }
 
   /**
-   * Generate next droplet packet
-   * @returns {Object} Droplet JSON payload object
+   * Generate next droplet packet as compact array [K, seed, degree, b64Data]
+   * @returns {Array} Compact droplet array
    */
   nextDroplet() {
     this.seqCounter++;
@@ -97,16 +97,7 @@ export class FountainEncoder {
     }
     const b64Data = btoa(binaryStr);
 
-    return {
-      k: K,
-      b: this.blockSize,
-      s: this.totalSize,
-      i: seed,
-      d: degree,
-      data: b64Data,
-      name: this.fileName,
-      type: this.mimeType
-    };
+    return [K, seed, degree, b64Data, this.totalSize];
   }
 }
 
@@ -135,40 +126,50 @@ export class FountainDecoder {
 
   /**
    * Add a decoded droplet packet
-   * @param {Object} droplet
+   * @param {Array|Object} droplet Array [K, seed, degree, b64Data, totalSize] or legacy Object
    * @returns {{ resolvedCount: number, totalBlocks: number, percent: number, isComplete: boolean }}
    */
   addDroplet(droplet) {
-    if (!droplet || !droplet.k || !droplet.data) {
-      return this.getStatus();
+    if (!droplet) return this.getStatus();
+
+    let K, seed, degree, b64Data, totalSize;
+    if (Array.isArray(droplet)) {
+      [K, seed, degree, b64Data, totalSize] = droplet;
+    } else if (typeof droplet === 'object') {
+      K = droplet.k;
+      seed = droplet.i;
+      degree = droplet.d;
+      b64Data = droplet.data;
+      totalSize = droplet.s;
     }
 
-    if (!this.isInitialized) {
-      this.totalBlocks = droplet.k;
-      this.blockSize = droplet.b || 250;
-      this.totalSize = droplet.s || (this.totalBlocks * this.blockSize);
-      this.fileName = droplet.name || 'audio.mp3';
-      this.mimeType = droplet.type || 'audio/mp3';
+    if (!K || !b64Data) return this.getStatus();
 
+    // Convert Base64 data back to Uint8Array
+    const binaryStr = atob(b64Data);
+    const blockSize = binaryStr.length;
+
+    if (!this.isInitialized) {
+      this.totalBlocks = K;
+      this.blockSize = blockSize;
+      this.totalSize = totalSize || (this.totalBlocks * this.blockSize);
       this.resolvedBlocks = new Array(this.totalBlocks).fill(null);
       this.resolvedCount = 0;
       this.isInitialized = true;
     }
 
     // Ignore duplicate droplets by seed
-    if (this.processedSeeds.has(droplet.i)) {
+    if (this.processedSeeds.has(seed)) {
       return this.getStatus();
     }
-    this.processedSeeds.add(droplet.i);
+    this.processedSeeds.add(seed);
 
-    // Convert Base64 data back to Uint8Array
-    const binaryStr = atob(droplet.data);
     const dataU8 = new Uint8Array(this.blockSize);
     for (let b = 0; b < binaryStr.length; b++) {
       dataU8[b] = binaryStr.charCodeAt(b);
     }
 
-    const indices = getIndicesFromSeed(droplet.i, droplet.d, this.totalBlocks);
+    const indices = getIndicesFromSeed(seed, degree, this.totalBlocks);
 
     // Create droplet entry
     const newDroplet = {

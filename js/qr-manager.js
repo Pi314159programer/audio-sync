@@ -63,13 +63,28 @@ export class QRManager {
     const container = document.getElementById(containerId);
     if (!container) return;
 
+    container.innerHTML = '';
+
+    // Instantiate persistent QRCode instance once to avoid DOM destruction flicker/white screen
+    let qrcodeInstance = null;
+    if (window.QRCode) {
+      qrcodeInstance = new window.QRCode(container, {
+        text: 'init',
+        width: 230,
+        height: 230,
+        colorDark: "#0f172a",
+        colorLight: "#ffffff",
+        correctLevel: window.QRCode.CorrectLevel.L
+      });
+    }
+
     const baseCompact = this.compressPayload(payloadObject);
     const periodSec = this.getPeriodFromRange(payloadObject.range);
     const periodMs = periodSec * 1000;
 
-    // Initialize Fountain Encoder if audio file is provided
+    // Initialize Fountain Encoder with 130-byte block size for ultra-compact payload
     if (audioFileBuffer && audioFileBuffer.byteLength > 0) {
-      this.fountainEncoder = new FountainEncoder(audioFileBuffer, fileName, 'audio/mp3', 220);
+      this.fountainEncoder = new FountainEncoder(audioFileBuffer, fileName, 'audio/mp3', 130);
     } else {
       this.fountainEncoder = null;
     }
@@ -78,7 +93,6 @@ export class QRManager {
     this.frameSeq = 0;
 
     const drawFrame = () => {
-      container.innerHTML = '';
       this.frameSeq++;
 
       const now = performance.now();
@@ -103,16 +117,15 @@ export class QRManager {
 
       const jsonStr = JSON.stringify(framePayload);
 
-      if (window.QRCode) {
-        new window.QRCode(container, {
-          text: jsonStr,
-          width: 230,
-          height: 230,
-          colorDark: "#0f172a",
-          colorLight: "#ffffff",
-          correctLevel: window.QRCode.CorrectLevel.L
-        });
+      if (qrcodeInstance) {
+        try {
+          qrcodeInstance.clear();
+          qrcodeInstance.makeCode(jsonStr);
+        } catch (err) {
+          console.warn("QR code render error:", err);
+        }
       } else {
+        container.innerHTML = '';
         const img = document.createElement('img');
         img.src = `https://api.qrserver.com/v1/create-qr-code/?size=230x230&data=${encodeURIComponent(jsonStr)}`;
         img.width = 230;
@@ -122,8 +135,8 @@ export class QRManager {
     };
 
     drawFrame();
-    // High FPS dynamic QR stream (~100ms per frame)
-    this.dynamicTimer = setInterval(drawFrame, 100);
+    // Dynamic QR stream (~150ms per frame for clear camera recognition)
+    this.dynamicTimer = setInterval(drawFrame, 150);
   }
 
   /**
