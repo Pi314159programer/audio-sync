@@ -619,7 +619,6 @@ class AppController {
       this.isPlaying = false;
       this.ytPlayer.pause();
       document.getElementById('btn-play-pause').innerText = '▶️';
-      this.startPauseProgressLoop();
     }, delayToNextCycle + periodMs);
   }
 
@@ -633,13 +632,7 @@ class AppController {
   }
 
   startPauseProgressLoop() {
-    this.stopPauseProgressLoop();
-    this.pauseSyncTimer = setInterval(() => {
-      if (!this.isPlaying && this.role === 'master' && this.syncEngine.isCalibrated) {
-        const currentTime = this.ytPlayer.getCurrentTime();
-        this.toneGen.playProgressSignal(currentTime);
-      }
-    }, 5000); // Repeat every 5 seconds while paused
+    // Background 5s pause progress signal loop removed per user directive
   }
 
   stopPauseProgressLoop() {
@@ -668,6 +661,10 @@ class AppController {
       const delayToNextCycle = this.syncEngine.getTimeToNextCycleStart();
       setTimeout(() => {
         this.isPlaying = true;
+        const currentSec = this.ytPlayer.getCurrentTime();
+        if (currentSec > 0.5) {
+          this.ytPlayer.seekTo(currentSec);
+        }
         this.ytPlayer.play();
         this.updateSlaveUIStatus();
       }, delayToNextCycle);

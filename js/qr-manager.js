@@ -47,6 +47,8 @@ export class QRManager {
       urls: (compact.v || []).map(id => id.length === 11 ? `https://www.youtube.com/watch?v=${id}` : id),
       period: compact.per || 0.5,
       clk: compact.clk || 0,
+      cyc: compact.cyc || 0,
+      m: compact.m || 0,
       pulse: !!compact.pulse
     };
   }
@@ -98,16 +100,17 @@ export class QRManager {
       const now = performance.now();
       const elapsed = now - masterT0;
       const cycleIndex = Math.floor(elapsed / periodMs);
-      const offsetInCycle = ((elapsed % periodMs) + periodMs) % periodMs;
+      const m = Math.round(elapsed) % periodMs; // Millisecond counter 0..periodMs-1
 
       // Pulse marker true at the exact start (first 100ms) of every clock cycle
-      const isPulseFrame = offsetInCycle < 100;
+      const isPulseFrame = m < 100;
 
       const framePayload = {
         ...baseCompact,
         per: periodSec,
         clk: Math.round(now),
         cyc: cycleIndex,
+        m: m,
         pulse: isPulseFrame ? 1 : 0,
         seq: this.frameSeq
       };
@@ -163,7 +166,8 @@ export class QRManager {
     let decodedConfig = null;
 
     const observedCycles = new Set();
-    const phaseEstimates = [];
+    let slaveT0 = null;
+    let consecutiveLockCount = 0;
 
     if (window.Html5Qrcode) {
       this.html5QrCode = new window.Html5Qrcode(readerElementId);
@@ -186,25 +190,45 @@ export class QRManager {
               const rawData = JSON.parse(decodedText);
               decodedConfig = this.decompressPayload(rawData);
 
-              // Perform multi-cycle clock phase alignment
               if (rawData.cyc !== undefined) {
                 observedCycles.add(rawData.cyc);
               }
 
               const periodMs = (decodedConfig.period || 0.5) * 1000;
-              const masterNow = decodedConfig.clk;
-              const masterCycleOffset = masterNow % periodMs;
-              const estimatedLocalT0 = scanTime - masterCycleOffset;
+              const masterM = rawData.m !== undefined ? rawData.m : (rawData.clk % periodMs);
 
-              phaseEstimates.push(estimatedLocalT0);
-              if (phaseEstimates.length > 20) phaseEstimates.shift();
+              // Account for camera capture & JSON parsing latency (~10ms)
+              const transitLatency = Math.round(performance.now() - scanTime);
+              const targetM = (masterM + transitLatency) % periodMs;
 
-              // Calculate smoothed local t0 anchor
-              const avgLocalT0 = phaseEstimates.reduce((a, b) => a + b, 0) / phaseEstimates.length;
+              const now = performance.now();
+              if (slaveT0 === null) {
+                slaveT0 = now - targetM;
+              }
+
+              // Compute current Slave millisecond count
+              const selfElapsed = Math.round(now - slaveT0);
+              const selfM = ((selfElapsed % periodMs) + periodMs) % periodMs;
+
+              // Millisecond count difference modulo periodMs
+              let diffMs = Math.abs(selfM - targetM);
+              if (diffMs > periodMs / 2) diffMs = periodMs - diffMs;
+
+              if (diffMs > 50) {
+                // Difference exceeds 50ms threshold: Assimilate / override local slaveT0 directly
+                slaveT0 = now - targetM;
+                consecutiveLockCount = 0;
+              } else {
+                // Difference within 50ms threshold: Millisecond counter phase locked!
+                consecutiveLockCount++;
+              }
+
               decodedConfig.scanTime = scanTime;
-              decodedConfig.alignedT0 = avgLocalT0;
+              decodedConfig.alignedT0 = slaveT0;
+              decodedConfig.diffMs = diffMs;
 
               const cycleCount = observedCycles.size;
+              const isPhaseLocked = consecutiveLockCount >= 3;
               const cycleProgress = Math.min(100, Math.floor((cycleCount / 3) * 100));
 
               // Process Fountain Code droplet if present
@@ -217,29 +241,31 @@ export class QRManager {
                     percent: overallPercent,
                     resolvedCount: status.resolvedCount,
                     totalBlocks: status.totalBlocks,
-                    cycleCount: cycleCount
+                    cycleCount: cycleCount,
+                    diffMs: diffMs
                   });
                 }
 
-                // Completion requires BOTH Fountain file reconstruction AND min 3 cycles phase alignment
-                if (status.isComplete && cycleCount >= 3) {
+                // Completion requires BOTH Fountain file reconstruction AND min 3 cycles phase alignment (50ms locked)
+                if (status.isComplete && cycleCount >= 3 && isPhaseLocked) {
                   hasCompleted = true;
                   const reconstructedFile = this.fountainDecoder.getReconstructedFile();
                   this.stopScanner();
                   onScanSuccess(decodedConfig, reconstructedFile);
                 }
               } else {
-                // If no audio file attached, completion requires min 3 distinct clock cycles phase-lock
+                // If no audio file attached, completion requires min 3 distinct clock cycles & 50ms phase lock
                 if (onScanProgress) {
                   onScanProgress({
                     percent: cycleProgress,
                     resolvedCount: cycleCount,
                     totalBlocks: 3,
-                    cycleCount: cycleCount
+                    cycleCount: cycleCount,
+                    diffMs: diffMs
                   });
                 }
 
-                if (cycleCount >= 3) {
+                if (cycleCount >= 3 && isPhaseLocked) {
                   hasCompleted = true;
                   this.stopScanner();
                   onScanSuccess(decodedConfig, null);
