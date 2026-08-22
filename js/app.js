@@ -295,24 +295,7 @@ class AppController {
       // Stop optical dynamic QR code animation
       this.qrManager.stopDynamicQR();
 
-      // Master One-Time Phase Error Zeroing Compensation
-      const now = performance.now();
-      const periodMs = this.syncEngine.period * 1000;
-      const currentSelfM = ((now - this.syncEngine.t0) % periodMs + periodMs) % periodMs;
-
-      const totalFrames = Math.max(1, Math.round(periodMs / 25));
-      const targetQrM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
-
-      let phaseErr = targetQrM - currentSelfM;
-      if (phaseErr > periodMs / 2) phaseErr -= periodMs;
-      if (phaseErr < -periodMs / 2) phaseErr += periodMs;
-
-      // Adjust t0 once on this transition cycle to eliminate phase error to 0ms
-      this.syncEngine.t0 = this.syncEngine.t0 - phaseErr;
-      this.isMasterLocked = true;
-      this.masterErrMs = 0;
-      this.masterSelfMode = 'LOCKED (SYNCED)';
-
+      // Defer Two-Cycle Phase Error Shift to onCalibrationCompleted
       this.onCalibrationCompleted();
     });
 
@@ -430,25 +413,6 @@ class AppController {
         btn.classList.add('selected');
         this.assignedPart = i;
 
-        // Slave One-Time Phase Error Zeroing Compensation
-        const now = performance.now();
-        const periodMs = this.syncEngine.period * 1000;
-        const currentSelfM = ((now - this.syncEngine.t0) % periodMs + periodMs) % periodMs;
-        const targetM = (this.config && this.config.masterM !== undefined) ? this.config.masterM : 0;
-
-        let phaseErr = targetM - currentSelfM;
-        if (phaseErr > periodMs / 2) phaseErr -= periodMs;
-        if (phaseErr < -periodMs / 2) phaseErr += periodMs;
-
-        // Adjust t0 once on this transition cycle to eliminate phase error to 0ms
-        this.syncEngine.t0 = this.syncEngine.t0 - phaseErr;
-        this.isSlaveSynced = true;
-        this.slaveErrMs = 0;
-        if (!this.lastDebugData) this.lastDebugData = {};
-        this.lastDebugData.diffMs = 0;
-        this.lastDebugData.absErr = 0;
-        this.lastDebugData.mode = 'LOCKED (SYNCED)';
-
         // Transition directly to Full White Interface (View 8) for audio tap verification
         this.showView('view-white-screen');
         this.setupSlaveWhiteScreenTap();
@@ -502,6 +466,34 @@ class AppController {
     whiteView.addEventListener('touchstart', onTap);
   }
 
+  applyTwoCyclePhaseElimination(targetM) {
+    if (!this.syncEngine || !this.syncEngine.t0) return;
+
+    const now = performance.now();
+    const periodMs = this.syncEngine.period * 1000;
+    const currentSelfM = ((now - this.syncEngine.t0) % periodMs + periodMs) % periodMs;
+
+    let phaseErr = targetM - currentSelfM;
+    if (phaseErr > periodMs / 2) phaseErr -= periodMs;
+    if (phaseErr < -periodMs / 2) phaseErr += periodMs;
+
+    const shift1 = Math.floor(phaseErr / 2);
+    const shift2 = phaseErr - shift1;
+
+    console.log(`[Two-Cycle Phase Shift] Total Phase Error: ${phaseErr}ms | Cycle 1 Shift: ${shift1}ms | Cycle 2 Shift: ${shift2}ms`);
+
+    // Cycle 1 Shift: Apply first half shift immediately upon entering interface
+    this.syncEngine.t0 = this.syncEngine.t0 - shift1;
+
+    // Cycle 2 Shift: Apply second half shift after 1 cycle duration
+    setTimeout(() => {
+      if (this.syncEngine && this.syncEngine.t0) {
+        this.syncEngine.t0 = this.syncEngine.t0 - shift2;
+        console.log(`[Two-Cycle Phase Shift] Cycle 2 Shift Applied (${shift2}ms). Phase Error 100% Eliminated!`);
+      }
+    }, periodMs);
+  }
+
   async onCalibrationCompleted() {
     // Initialize voice part default states (all enabled = true)
     for (let i = 1; i <= Math.max(8, this.config.partCount); i++) {
@@ -533,11 +525,19 @@ class AppController {
     // Start common clock visual pulse loop
     this.startClockPulseLoop();
 
+    const periodMs = this.syncEngine.period * 1000;
     if (this.role === 'master') {
+      const totalFrames = Math.max(1, Math.round(periodMs / 25));
+      const targetQrM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
+      this.applyTwoCyclePhaseElimination(targetQrM);
+
       this.showView('view-master-control');
       this.renderMasterPartButtons();
       this.startMasterProgressUpdater();
     } else {
+      const targetMasterM = (this.config && this.config.masterM !== undefined) ? this.config.masterM : 0;
+      this.applyTwoCyclePhaseElimination(targetMasterM);
+
       this.showView('view-slave-status');
       this.updateSlaveUIStatus();
     }
@@ -632,36 +632,18 @@ class AppController {
     if (this.role === 'master') {
       const totalFrames = Math.max(1, Math.round(periodMs / 25));
       const qrFrameM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
+      const err = this.masterErrMs !== undefined ? this.masterErrMs : 0;
 
-      if (this.isMasterLocked) {
-        if (masterMEl) masterMEl.innerText = `${selfM} ms`;
-        if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
-        if (diffMsEl) diffMsEl.innerText = `0 ms [ZEROED]`;
-        if (modeEl) {
-          modeEl.innerText = 'LOCKED (SYNCED)';
-          modeEl.style.color = '#4ade80';
-        }
-      } else {
-        const err = this.masterErrMs !== undefined ? this.masterErrMs : 0;
-        if (masterMEl) masterMEl.innerText = `${qrFrameM} ms`;
-        if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
-        if (diffMsEl) diffMsEl.innerText = `${err > 0 ? '+' : ''}${err} ms (≤5ms)`;
-        if (modeEl) {
-          modeEl.innerText = this.masterSelfMode || 'LOCKED';
-          modeEl.style.color = (this.masterSelfMode === 'LOCKED' || !this.masterSelfMode) ? '#4ade80' : (this.masterSelfMode === 'SOFT_NUDGE' ? '#fbbf24' : '#f87171');
-        }
+      if (masterMEl) masterMEl.innerText = `${qrFrameM} ms`;
+      if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
+      if (diffMsEl) diffMsEl.innerText = `${err > 0 ? '+' : ''}${err} ms (≤5ms)`;
+      if (modeEl) {
+        modeEl.innerText = this.masterSelfMode || 'LOCKED';
+        modeEl.style.color = (this.masterSelfMode === 'LOCKED' || !this.masterSelfMode) ? '#4ade80' : (this.masterSelfMode === 'SOFT_NUDGE' ? '#fbbf24' : '#f87171');
       }
     } else {
       if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
-
-      if (this.isSlaveSynced) {
-        if (masterMEl) masterMEl.innerText = `${selfM} ms`;
-        if (diffMsEl) diffMsEl.innerText = `0 ms [ZEROED]`;
-        if (modeEl) {
-          modeEl.innerText = 'LOCKED (SYNCED)';
-          modeEl.style.color = '#4ade80';
-        }
-      } else if (this.lastDebugData) {
+      if (this.lastDebugData) {
         if (masterMEl) masterMEl.innerText = `${this.lastDebugData.masterM !== undefined ? this.lastDebugData.masterM : 0} ms`;
         if (diffMsEl) {
           const diff = this.lastDebugData.diffMs || 0;
