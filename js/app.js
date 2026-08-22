@@ -25,7 +25,7 @@ class AppController {
       urls: []
     };
 
-    this.assignedPart = 0; // Selected part for this device (0 to N)
+    this.assignedPart = 1; // Selected part for this device (1 to N)
     this.isPlaying = false;
     this.isMuted = false;
     this.partStates = {}; // { 1: true, 2: true, ... } true=playing, false=muted
@@ -34,7 +34,6 @@ class AppController {
 
     // Voice Part Color Mapping
     this.partColors = {
-      0: '#64748b',
       1: '#ff4d4d',
       2: '#ff944d',
       3: '#ffd11a',
@@ -240,10 +239,11 @@ class AppController {
     const grid = document.getElementById('slave-parts-grid');
     grid.innerHTML = '';
 
-    for (let i = 0; i <= this.config.partCount; i++) {
+    const totalParts = Math.max(1, this.config.partCount);
+    for (let i = 1; i <= totalParts; i++) {
       const btn = document.createElement('button');
       btn.className = 'part-select-btn';
-      btn.innerText = i === 0 ? '0 聲部 (預設)' : `第 ${i} 聲部`;
+      btn.innerText = `第 ${i} 聲部`;
       btn.addEventListener('click', () => {
         grid.querySelectorAll('.part-select-btn').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
@@ -294,6 +294,16 @@ class AppController {
     }
 
     this.ytPlayer.setPlaylist(this.config.urls);
+
+    // Pre-warm YouTube player buffer for zero-latency start on mobile browsers
+    if (this.ytPlayer.isReady) {
+      this.ytPlayer.mute();
+      this.ytPlayer.play();
+      setTimeout(() => {
+        this.ytPlayer.pause();
+        this.ytPlayer.unmute();
+      }, 150);
+    }
 
     if (this.role === 'master') {
       this.showView('view-master-control');

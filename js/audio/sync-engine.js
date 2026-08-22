@@ -157,7 +157,13 @@ export class SyncEngine {
       this.isLocking = false;
       if (this.progressInterval) clearInterval(this.progressInterval);
       this.emit('syncProgress', { elapsedSec: '20.0', totalSec: 20, percent: 100 });
-      this.t0 = performance.now();
+
+      // Anchor t0 precisely onto the phase-aligned nextPulseTime acoustic grid!
+      const now = performance.now();
+      const periodMs = this.period * 1000;
+      const cycles = Math.ceil((now - this.nextPulseTime) / periodMs);
+      this.t0 = this.nextPulseTime + cycles * periodMs;
+
       this.isCalibrated = true;
       this.emit('syncComplete');
     }, 3000);
@@ -177,7 +183,13 @@ export class SyncEngine {
       this.isLocking = false;
       if (this.progressInterval) clearInterval(this.progressInterval);
       this.emit('syncProgress', { elapsedSec: '20.0', totalSec: 20, percent: 100 });
-      this.t0 = performance.now();
+
+      // Anchor t0 precisely onto the phase-aligned nextPulseTime acoustic grid!
+      const now = performance.now();
+      const periodMs = this.period * 1000;
+      const cycles = Math.ceil((now - this.nextPulseTime) / periodMs);
+      this.t0 = this.nextPulseTime + cycles * periodMs;
+
       this.isCalibrated = true;
       this.emit('syncComplete');
     }, 2700);
