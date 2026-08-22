@@ -38,6 +38,7 @@ class AppController {
     this.isMuted = false;
     this.partStates = {}; // { 1: true, 2: true, ... } true=playing, false=muted
     this.pauseSyncTimer = null;
+    this.phaseAdjustmentQueue = []; // Queued dynamic cycle limits for smooth phase elimination
     this.seekWasAdjusted = false;
     this.audioFileBuffer = null;
     this.audioFileName = '';
@@ -470,33 +471,24 @@ class AppController {
     if (!this.syncEngine || !this.syncEngine.t0) return;
 
     const now = performance.now();
-    const periodMs = this.syncEngine.period * 1000;
-    const currentSelfM = ((now - this.syncEngine.t0) % periodMs + periodMs) % periodMs;
+    const standardPeriodMs = this.syncEngine.period * 1000;
+    const currentSelfM = ((now - this.syncEngine.t0) % standardPeriodMs + standardPeriodMs) % standardPeriodMs;
 
     let phaseErr = targetM - currentSelfM;
-    if (phaseErr > periodMs / 2) phaseErr -= periodMs;
-    if (phaseErr < -periodMs / 2) phaseErr += periodMs;
+    if (phaseErr > standardPeriodMs / 2) phaseErr -= standardPeriodMs;
+    if (phaseErr < -standardPeriodMs / 2) phaseErr += standardPeriodMs;
 
     const shift1 = Math.floor(phaseErr / 2);
     const shift2 = phaseErr - shift1;
 
-    const cycle1Limit = periodMs - shift1;
-    const cycle2Limit = periodMs - shift2;
+    const limit1 = standardPeriodMs - shift1;
+    const limit2 = standardPeriodMs - shift2;
 
-    console.log(`[Two-Cycle Phase Shift] Total Phase Error: ${phaseErr}ms.`);
-    console.log(`  -> Cycle 1 Limit: ${cycle1Limit}ms (${shift1 < 0 ? 'EXTENDED +' + Math.abs(shift1) : 'DECREASED -' + shift1}ms)`);
-    console.log(`  -> Cycle 2 Limit: ${cycle2Limit}ms (${shift2 < 0 ? 'EXTENDED +' + Math.abs(shift2) : 'DECREASED -' + shift2}ms)`);
+    this.phaseAdjustmentQueue = [limit1, limit2];
 
-    // Cycle 1 Shift: Apply first half shift immediately upon entering interface
-    this.syncEngine.t0 = this.syncEngine.t0 - shift1;
-
-    // Cycle 2 Shift: Apply second half shift after 1 cycle duration
-    setTimeout(() => {
-      if (this.syncEngine && this.syncEngine.t0) {
-        this.syncEngine.t0 = this.syncEngine.t0 - shift2;
-        console.log(`[Two-Cycle Phase Shift] Cycle 2 Shift Applied (${shift2}ms). Phase Error 100% Eliminated to 0ms!`);
-      }
-    }, periodMs);
+    console.log(`[Two-Cycle Smooth Limit Queue] Total Phase Error: ${phaseErr}ms.`);
+    console.log(`  -> Cycle 1 Limit: ${limit1}ms (Count 0..${Math.round(limit1 - 1)})`);
+    console.log(`  -> Cycle 2 Limit: ${limit2}ms (Count 0..${Math.round(limit2 - 1)})`);
   }
 
   async onCalibrationCompleted() {
@@ -558,37 +550,52 @@ class AppController {
       if (!this.syncEngine.isCalibrated || !this.syncEngine.t0) return;
 
       const now = performance.now();
-      const periodMs = this.syncEngine.period * 1000;
+      const standardPeriodMs = this.syncEngine.period * 1000;
+
+      // Active cycle period limit (from phaseAdjustmentQueue or standardPeriodMs)
+      let activeLimit = standardPeriodMs;
+      if (this.phaseAdjustmentQueue && this.phaseAdjustmentQueue.length > 0) {
+        activeLimit = this.phaseAdjustmentQueue[0];
+      }
+
       let elapsed = now - this.syncEngine.t0;
-      let offsetInCycle = ((elapsed % periodMs) + periodMs) % periodMs;
+
+      // Wrap cycle smoothly when elapsed hits activeLimit
+      while (elapsed >= activeLimit) {
+        this.syncEngine.t0 += activeLimit;
+        elapsed = now - this.syncEngine.t0;
+
+        if (this.phaseAdjustmentQueue && this.phaseAdjustmentQueue.length > 0) {
+          this.phaseAdjustmentQueue.shift();
+        }
+        activeLimit = (this.phaseAdjustmentQueue && this.phaseAdjustmentQueue.length > 0)
+          ? this.phaseAdjustmentQueue[0]
+          : standardPeriodMs;
+      }
+
+      const offsetInCycle = Math.max(0, Math.floor(elapsed));
 
       // Master Self-Correction Protocol: If Master's selfM differs from QR m by > 5ms, adjust masterT0!
       if (this.role === 'master' && this.qrManager && this.qrManager.dynamicTimer) {
-        const totalFrames = Math.max(1, Math.round(periodMs / 25));
-        const qrFrameM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
+        const totalFrames = Math.max(1, Math.round(standardPeriodMs / 25));
+        const qrFrameM = ((this.qrManager.frameSeq % totalFrames) * 25) % standardPeriodMs;
 
         let err = qrFrameM - offsetInCycle;
-        if (err > periodMs / 2) err -= periodMs;
-        if (err < -periodMs / 2) err += periodMs;
+        if (err > standardPeriodMs / 2) err -= standardPeriodMs;
+        if (err < -standardPeriodMs / 2) err += standardPeriodMs;
         const absErr = Math.abs(err);
 
         // Perform self-correction ONLY if Master is NOT locked yet
         if (!this.isMasterLocked) {
           if (absErr > 5) {
             if (absErr > 70) {
-              // Rule 1: Hard reset > 70ms
               this.syncEngine.t0 = now - qrFrameM;
               this.masterSelfMode = 'HARD_RESET';
             } else {
-              // Rule 2: Soft nudge <= 70ms (e.g. selfM=97, qrM=25 -> compensates 72ms)
               this.syncEngine.t0 = this.syncEngine.t0 - (err * 0.6);
               this.masterSelfMode = 'SOFT_NUDGE';
             }
-            // Recalculate offset after adjustment
-            elapsed = now - this.syncEngine.t0;
-            offsetInCycle = ((elapsed % periodMs) + periodMs) % periodMs;
           } else {
-            // Master clock difference <= 5ms! Permanently freeze clock anchor & unmask QR Code!
             this.isMasterLocked = true;
             this.masterSelfMode = 'LOCKED (FROZEN)';
 
