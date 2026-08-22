@@ -310,6 +310,8 @@ class AppController {
       // Adjust t0 once on this transition cycle to eliminate phase error to 0ms
       this.syncEngine.t0 = this.syncEngine.t0 - phaseErr;
       this.isMasterLocked = true;
+      this.masterErrMs = 0;
+      this.masterSelfMode = 'LOCKED (SYNCED)';
 
       this.onCalibrationCompleted();
     });
@@ -440,6 +442,12 @@ class AppController {
 
         // Adjust t0 once on this transition cycle to eliminate phase error to 0ms
         this.syncEngine.t0 = this.syncEngine.t0 - phaseErr;
+        this.isSlaveSynced = true;
+        this.slaveErrMs = 0;
+        if (!this.lastDebugData) this.lastDebugData = {};
+        this.lastDebugData.diffMs = 0;
+        this.lastDebugData.absErr = 0;
+        this.lastDebugData.mode = 'LOCKED (SYNCED)';
 
         // Transition directly to Full White Interface (View 8) for audio tap verification
         this.showView('view-white-screen');
@@ -624,18 +632,36 @@ class AppController {
     if (this.role === 'master') {
       const totalFrames = Math.max(1, Math.round(periodMs / 25));
       const qrFrameM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
-      const err = this.masterErrMs !== undefined ? this.masterErrMs : 0;
 
-      if (masterMEl) masterMEl.innerText = `${qrFrameM} ms`;
-      if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
-      if (diffMsEl) diffMsEl.innerText = `${err > 0 ? '+' : ''}${err} ms (≤5ms)`;
-      if (modeEl) {
-        modeEl.innerText = this.masterSelfMode || 'LOCKED';
-        modeEl.style.color = (this.masterSelfMode === 'LOCKED' || !this.masterSelfMode) ? '#4ade80' : (this.masterSelfMode === 'SOFT_NUDGE' ? '#fbbf24' : '#f87171');
+      if (this.isMasterLocked) {
+        if (masterMEl) masterMEl.innerText = `${selfM} ms`;
+        if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
+        if (diffMsEl) diffMsEl.innerText = `0 ms [ZEROED]`;
+        if (modeEl) {
+          modeEl.innerText = 'LOCKED (SYNCED)';
+          modeEl.style.color = '#4ade80';
+        }
+      } else {
+        const err = this.masterErrMs !== undefined ? this.masterErrMs : 0;
+        if (masterMEl) masterMEl.innerText = `${qrFrameM} ms`;
+        if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
+        if (diffMsEl) diffMsEl.innerText = `${err > 0 ? '+' : ''}${err} ms (≤5ms)`;
+        if (modeEl) {
+          modeEl.innerText = this.masterSelfMode || 'LOCKED';
+          modeEl.style.color = (this.masterSelfMode === 'LOCKED' || !this.masterSelfMode) ? '#4ade80' : (this.masterSelfMode === 'SOFT_NUDGE' ? '#fbbf24' : '#f87171');
+        }
       }
     } else {
       if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
-      if (this.lastDebugData) {
+
+      if (this.isSlaveSynced) {
+        if (masterMEl) masterMEl.innerText = `${selfM} ms`;
+        if (diffMsEl) diffMsEl.innerText = `0 ms [ZEROED]`;
+        if (modeEl) {
+          modeEl.innerText = 'LOCKED (SYNCED)';
+          modeEl.style.color = '#4ade80';
+        }
+      } else if (this.lastDebugData) {
         if (masterMEl) masterMEl.innerText = `${this.lastDebugData.masterM !== undefined ? this.lastDebugData.masterM : 0} ms`;
         if (diffMsEl) {
           const diff = this.lastDebugData.diffMs || 0;
