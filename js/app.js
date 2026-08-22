@@ -267,12 +267,7 @@ class AppController {
       }
       this.showView('view-master-qr');
 
-      // Reset Master Lock state and show QR Code masking overlay
-      this.isMasterLocked = false;
-      const overlay = document.getElementById('qr-lock-overlay');
-      if (overlay) overlay.classList.remove('hidden');
-
-      // Anchor Master's SyncEngine clock grid IMMEDIATELY when QR code generation starts!
+      // Anchor Master's SyncEngine clock grid IMMEDIATELY on Frame 0 of QR code generation!
       const masterT0 = performance.now();
       this.syncEngine.configureRange(this.config.range);
       this.syncEngine.t0 = masterT0;
@@ -583,45 +578,6 @@ class AppController {
 
       const offsetInCycle = Math.max(0, Math.floor(elapsed));
 
-      // Master Self-Correction Protocol: If Master's selfM differs from QR m by > 5ms, adjust masterT0!
-      if (this.role === 'master' && this.qrManager && this.qrManager.dynamicTimer) {
-        const totalFrames = Math.max(1, Math.round(standardPeriodMs / 25));
-        const qrFrameM = ((this.qrManager.frameSeq % totalFrames) * 25) % standardPeriodMs;
-
-        let err = qrFrameM - offsetInCycle;
-        if (err > standardPeriodMs / 2) err -= standardPeriodMs;
-        if (err < -standardPeriodMs / 2) err += standardPeriodMs;
-        const absErr = Math.abs(err);
-
-        // Perform self-correction ONLY if Master is NOT locked yet
-        if (!this.isMasterLocked) {
-          if (absErr > 5) {
-            if (absErr > 70) {
-              this.syncEngine.t0 = now - qrFrameM;
-              this.masterSelfMode = 'HARD_RESET';
-            } else {
-              this.syncEngine.t0 = this.syncEngine.t0 - (err * 0.6);
-              this.masterSelfMode = 'SOFT_NUDGE';
-            }
-          } else {
-            this.isMasterLocked = true;
-            this.masterSelfMode = 'LOCKED (FROZEN)';
-
-            const overlay = document.getElementById('qr-lock-overlay');
-            if (overlay) overlay.classList.add('hidden');
-          }
-
-          const diffSub = document.getElementById('qr-lock-diff');
-          if (diffSub && !this.isMasterLocked) {
-            diffSub.innerText = `時差: ${Math.round(absErr)} ms (目標 ≤5ms)`;
-          }
-        } else {
-          this.masterSelfMode = 'LOCKED (FROZEN)';
-        }
-
-        this.masterErrMs = Math.round(err);
-      }
-
       // Pulse white ball for 250ms (or 50% of activeLimit) at start of each common clock cycle
       const pulseDurationMs = Math.min(250, activeLimit * 0.5);
       const isActive = offsetInCycle < pulseDurationMs;
@@ -652,14 +608,13 @@ class AppController {
     if (this.role === 'master') {
       const totalFrames = Math.max(1, Math.round(periodMs / 25));
       const qrFrameM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
-      const err = this.masterErrMs !== undefined ? this.masterErrMs : 0;
 
       if (masterMEl) masterMEl.innerText = `${qrFrameM} ms`;
       if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
-      if (diffMsEl) diffMsEl.innerText = `${err > 0 ? '+' : ''}${err} ms (≤5ms)`;
+      if (diffMsEl) diffMsEl.innerText = `0 ms [EXACT]`;
       if (modeEl) {
-        modeEl.innerText = this.masterSelfMode || 'LOCKED';
-        modeEl.style.color = (this.masterSelfMode === 'LOCKED' || !this.masterSelfMode) ? '#4ade80' : (this.masterSelfMode === 'SOFT_NUDGE' ? '#fbbf24' : '#f87171');
+        modeEl.innerText = 'MASTER (RUNNING)';
+        modeEl.style.color = '#4ade80';
       }
     } else {
       if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
