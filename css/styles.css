@@ -859,3 +859,43 @@ html, body {
   color: #4ade80;
   font-weight: 700;
 }
+
+/* Master QR Code Lock Overlay */
+.qr-lock-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: opacity 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.qr-lock-spinner {
+  font-size: 2.2rem;
+  animation: pulseGlow 1.5s infinite ease-in-out;
+  margin-bottom: 0.4rem;
+}
+
+.qr-lock-text {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #38bdf8;
+  text-align: center;
+  padding: 0 0.5rem;
+}
+
+.qr-lock-sub {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 0.3rem;
+  font-family: monospace;
+}

@@ -266,6 +266,11 @@ class AppController {
       }
       this.showView('view-master-qr');
 
+      // Reset Master Lock state and show QR Code masking overlay
+      this.isMasterLocked = false;
+      const overlay = document.getElementById('qr-lock-overlay');
+      if (overlay) overlay.classList.remove('hidden');
+
       // Anchor Master's SyncEngine clock grid IMMEDIATELY when QR code generation starts!
       const masterT0 = performance.now();
       this.syncEngine.configureRange(this.config.range);
@@ -519,22 +524,38 @@ class AppController {
         if (err < -periodMs / 2) err += periodMs;
         const absErr = Math.abs(err);
 
-        if (absErr > 5) {
-          if (absErr > 70) {
-            // Rule 1: Hard reset > 70ms
-            this.syncEngine.t0 = now - qrFrameM;
-            this.masterSelfMode = 'HARD_RESET';
+        // Perform self-correction ONLY if Master is NOT locked yet
+        if (!this.isMasterLocked) {
+          if (absErr > 5) {
+            if (absErr > 70) {
+              // Rule 1: Hard reset > 70ms
+              this.syncEngine.t0 = now - qrFrameM;
+              this.masterSelfMode = 'HARD_RESET';
+            } else {
+              // Rule 2: Soft nudge <= 70ms (e.g. selfM=97, qrM=25 -> compensates 72ms)
+              this.syncEngine.t0 = this.syncEngine.t0 - (err * 0.6);
+              this.masterSelfMode = 'SOFT_NUDGE';
+            }
+            // Recalculate offset after adjustment
+            elapsed = now - this.syncEngine.t0;
+            offsetInCycle = ((elapsed % periodMs) + periodMs) % periodMs;
           } else {
-            // Rule 2: Soft nudge <= 70ms (e.g. selfM=97, qrM=25 -> compensates 72ms)
-            this.syncEngine.t0 = this.syncEngine.t0 - (err * 0.6);
-            this.masterSelfMode = 'SOFT_NUDGE';
+            // Master clock difference <= 5ms! Permanently freeze clock anchor & unmask QR Code!
+            this.isMasterLocked = true;
+            this.masterSelfMode = 'LOCKED (FROZEN)';
+
+            const overlay = document.getElementById('qr-lock-overlay');
+            if (overlay) overlay.classList.add('hidden');
           }
-          // Recalculate offset after adjustment
-          elapsed = now - this.syncEngine.t0;
-          offsetInCycle = ((elapsed % periodMs) + periodMs) % periodMs;
+
+          const diffSub = document.getElementById('qr-lock-diff');
+          if (diffSub && !this.isMasterLocked) {
+            diffSub.innerText = `時差: ${Math.round(absErr)} ms (目標 ≤5ms)`;
+          }
         } else {
-          this.masterSelfMode = 'LOCKED';
+          this.masterSelfMode = 'LOCKED (FROZEN)';
         }
+
         this.masterErrMs = Math.round(err);
       }
 
