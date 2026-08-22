@@ -470,16 +470,21 @@ class AppController {
     whiteView.addEventListener('touchstart', onTap);
   }
 
-  applyTwoCyclePhaseElimination(targetM) {
+  applyTwoCyclePhaseElimination(targetMOrExplicitErr) {
     if (!this.syncEngine || !this.syncEngine.t0) return;
 
     const now = performance.now();
     const standardPeriodMs = this.syncEngine.period * 1000;
-    const currentSelfM = ((now - this.syncEngine.t0) % standardPeriodMs + standardPeriodMs) % standardPeriodMs;
 
-    let phaseErr = targetM - currentSelfM;
-    if (phaseErr > standardPeriodMs / 2) phaseErr -= standardPeriodMs;
-    if (phaseErr < -standardPeriodMs / 2) phaseErr += standardPeriodMs;
+    let phaseErr = 0;
+    if (typeof targetMOrExplicitErr === 'number' && this.role === 'master') {
+      const currentSelfM = ((now - this.syncEngine.t0) % standardPeriodMs + standardPeriodMs) % standardPeriodMs;
+      phaseErr = targetMOrExplicitErr - currentSelfM;
+      if (phaseErr > standardPeriodMs / 2) phaseErr -= standardPeriodMs;
+      if (phaseErr < -standardPeriodMs / 2) phaseErr += standardPeriodMs;
+    } else if (typeof targetMOrExplicitErr === 'number') {
+      phaseErr = targetMOrExplicitErr; // Explicit live Phase Error for Slave (e.g. +1ms)
+    }
 
     const shift1 = Math.floor(phaseErr / 2);
     const shift2 = phaseErr - shift1;
@@ -489,7 +494,7 @@ class AppController {
 
     this.phaseAdjustmentQueue = [limit1, limit2];
 
-    console.log(`[Two-Cycle Smooth Limit Queue] Total Phase Error: ${phaseErr}ms.`);
+    console.log(`[Two-Cycle Smooth Limit Queue] Total Live Phase Error: ${phaseErr}ms.`);
     console.log(`  -> Cycle 1 Limit: ${limit1}ms (Count 0..${Math.round(limit1 - 1)})`);
     console.log(`  -> Cycle 2 Limit: ${limit2}ms (Count 0..${Math.round(limit2 - 1)})`);
   }
@@ -535,8 +540,8 @@ class AppController {
       this.renderMasterPartButtons();
       this.startMasterProgressUpdater();
     } else {
-      const targetMasterM = (this.config && this.config.masterM !== undefined) ? this.config.masterM : 0;
-      this.applyTwoCyclePhaseElimination(targetMasterM);
+      const liveSlaveDiffMs = (this.lastDebugData && this.lastDebugData.diffMs !== undefined) ? this.lastDebugData.diffMs : 0;
+      this.applyTwoCyclePhaseElimination(liveSlaveDiffMs);
 
       this.showView('view-slave-status');
       this.updateSlaveUIStatus();
