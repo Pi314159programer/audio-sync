@@ -320,35 +320,29 @@ class AppController {
 
   startClockPulseLoop() {
     if (this.clockPulseLoopTimer) {
-      clearTimeout(this.clockPulseLoopTimer);
+      clearInterval(this.clockPulseLoopTimer);
       this.clockPulseLoopTimer = null;
     }
 
-    const scheduleNextVisualPulse = () => {
-      if (!this.syncEngine.isCalibrated) return;
+    this.clockPulseLoopTimer = setInterval(() => {
+      if (!this.syncEngine.isCalibrated || !this.syncEngine.t0) return;
 
-      const delay = this.syncEngine.getTimeToNextCycleStart();
+      const now = performance.now();
+      const periodMs = this.syncEngine.period * 1000;
+      const elapsed = now - this.syncEngine.t0;
+      const offsetInCycle = ((elapsed % periodMs) + periodMs) % periodMs;
 
-      this.clockPulseLoopTimer = setTimeout(() => {
-        // Flash white ball for 0.5s (500ms) at start of cycle
-        this.triggerVisualClkPulse(500);
-        scheduleNextVisualPulse();
-      }, delay);
-    };
+      // Pulse white ball for 0.5s (500ms) at start of each common clock cycle
+      const pulseDurationMs = Math.min(500, periodMs);
+      const isActive = offsetInCycle < pulseDurationMs;
 
-    scheduleNextVisualPulse();
-  }
-
-  triggerVisualClkPulse(durationMs = 500) {
-    const masterBall = document.getElementById('master-clk-ball');
-    const slaveBall = document.getElementById('slave-clk-ball');
-
-    const balls = [masterBall, slaveBall].filter(Boolean);
-    balls.forEach(b => b.classList.add('active'));
-
-    setTimeout(() => {
-      balls.forEach(b => b.classList.remove('active'));
-    }, durationMs);
+      const masterBall = document.getElementById('master-clk-ball');
+      const slaveBall = document.getElementById('slave-clk-ball');
+      [masterBall, slaveBall].filter(Boolean).forEach(ball => {
+        if (isActive) ball.classList.add('active');
+        else ball.classList.remove('active');
+      });
+    }, 20);
   }
 
   renderMasterPartButtons() {
@@ -406,31 +400,30 @@ class AppController {
   // --- MASTER CONTROL SIGNAL TRANSMISSION ---
 
   triggerMasterPlay() {
-    const delayToNextCycle = this.syncEngine.getTimeToNextCycleStart();
-    const periodMs = this.syncEngine.period * 1000;
+    // Stop continuous pause sync loop
+    this.stopPauseProgressLoop();
 
-    let preCycles = 0;
-    if (this.seekWasAdjusted) {
-      preCycles = 2; // Wait 2 extra clock cycles for progress sync
-      this.seekWasAdjusted = false;
-    }
+    // Transmit final 3.0s progress calibration signal
+    const currentSec = this.ytPlayer.getCurrentTime();
+    this.toneGen.playProgressSignal(currentSec);
 
-    // Schedule 0.5s 4000Hz start tone at next cycle + 0.05s
+    // Wait 3.0s for progress signal to complete, then trigger start signal on next common clk cycle
     setTimeout(() => {
-      if (preCycles > 0) {
-        // Transmit progress seek calibration tone during preCycles
-        this.toneGen.playProgressSignal(this.ytPlayer.getCurrentTime());
-      }
-      this.toneGen.playStartSignal();
-    }, delayToNextCycle + (preCycles * periodMs) + 50);
+      const delayToNextCycle = this.syncEngine.getTimeToNextCycleStart();
+      const periodMs = this.syncEngine.period * 1000;
 
-    // Synchronously start playback on the cycle IMMEDIATELY following the start signal
-    setTimeout(() => {
-      this.isPlaying = true;
-      this.ytPlayer.play();
-      document.getElementById('btn-play-pause').innerText = '⏸️';
-      this.stopPauseProgressLoop();
-    }, delayToNextCycle + ((preCycles + 1) * periodMs));
+      // Schedule 4000Hz start tone at next cycle + 50ms
+      setTimeout(() => {
+        this.toneGen.playStartSignal();
+      }, delayToNextCycle + 50);
+
+      // Synchronously start playback on cycle boundary immediately following start tone
+      setTimeout(() => {
+        this.isPlaying = true;
+        this.ytPlayer.play();
+        document.getElementById('btn-play-pause').innerText = '⏸️';
+      }, delayToNextCycle + periodMs);
+    }, 3000);
   }
 
   triggerMasterPause() {
@@ -463,11 +456,11 @@ class AppController {
   startPauseProgressLoop() {
     this.stopPauseProgressLoop();
     this.pauseSyncTimer = setInterval(() => {
-      if (!this.isPlaying && this.role === 'master') {
+      if (!this.isPlaying && this.role === 'master' && this.syncEngine.isCalibrated) {
         const currentTime = this.ytPlayer.getCurrentTime();
         this.toneGen.playProgressSignal(currentTime);
       }
-    }, 3000);
+    }, 5000); // Repeat every 5 seconds while paused
   }
 
   stopPauseProgressLoop() {
@@ -511,10 +504,13 @@ class AppController {
       }, delayToNextCycle);
     });
 
-    // 3. Progress Sync Command (4500Hz + FSK)
+    // 3. Progress Sync Command (4500Hz + 10x0.2s FSK + 4500Hz)
     this.dsp.on('cmdProgressSync', (timeSec) => {
       if (!this.isPlaying) {
-        this.ytPlayer.seekTo(timeSec);
+        const current = this.ytPlayer.getCurrentTime();
+        if (Math.abs(current - timeSec) > 1.0) { // Only adjust if time diff > 1 second
+          this.ytPlayer.seekTo(timeSec);
+        }
       }
     });
 

@@ -170,14 +170,15 @@ export class DSPAnalyzer {
   }
 
   /**
-   * Decode 10-bit FSK Progress timestamp (4700Hz='0', 4800Hz='1')
+   * Decode 10-bit FSK Progress timestamp (0.5s 4500Hz header + 10x0.2s bits + 0.5s footer)
    */
   decodeFSKProgress(getFreqEnergy) {
     const bits = [];
     let count = 0;
 
-    // Skip prefix 0.05s
+    // Skip remainder of 0.5s header (~400ms after initial 4500Hz detection)
     setTimeout(() => {
+      // Sample middle of each 0.2s bit (every 200ms)
       const bitTimer = setInterval(() => {
         const e0 = getFreqEnergy(4700);
         const e1 = getFreqEnergy(4800);
@@ -191,12 +192,15 @@ export class DSPAnalyzer {
         count++;
         if (count >= 10) {
           clearInterval(bitTimer);
-          this.fskDecoding = false;
           const timeSec = parseInt(bits.join(''), 2);
           this.emit('cmdProgressSync', timeSec);
+          // Wait for 0.5s footer to finish before enabling decoding again
+          setTimeout(() => {
+            this.fskDecoding = false;
+          }, 450);
         }
-      }, 20); // 20ms per bit
-    }, 50);
+      }, 200); // 200ms per bit
+    }, 400);
   }
 
   stop() {

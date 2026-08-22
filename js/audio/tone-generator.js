@@ -76,28 +76,33 @@ export class ToneGenerator {
   }
 
   /**
-   * Play Progress Calibration Binary FSK Signal (0.3s total)
-   * 0.05s 4500Hz prefix + 10 bits (0.02s each of 4700Hz='0' or 4800Hz='1')
+   * Play Progress Calibration Binary FSK Signal (3.0s total)
+   * 0.5s 4500Hz header + 10 bits (0.2s each of 4700Hz='0' or 4800Hz='1') + 0.5s 4500Hz footer
    * @param {number} timeSeconds Current playback time in seconds
+   * @param {number} [startTime] AudioContext start time offset
    */
   playProgressSignal(timeSeconds, startTime = null) {
+    if (!this.am.ctx) return;
     const ctx = this.am.ctx;
     const base = startTime !== null ? startTime : ctx.currentTime;
 
-    // Prefix 0.05s 4500Hz
-    this.playTone(4500, 0.05, base);
+    // 0.5s 4500Hz Header
+    this.playTone(4500, 0.5, base);
 
     // Encode seconds (0..1023) into 10 bits
     const integerSec = Math.min(1023, Math.max(0, Math.floor(timeSeconds)));
     const binStr = integerSec.toString(2).padStart(10, '0');
 
-    let offset = base + 0.05;
+    let offset = base + 0.5;
     for (let i = 0; i < 10; i++) {
       const bit = binStr[i];
       const freq = bit === '1' ? 4800 : 4700;
-      this.playTone(freq, 0.02, offset);
-      offset += 0.02;
+      this.playTone(freq, 0.2, offset);
+      offset += 0.2;
     }
+
+    // 0.5s 4500Hz Footer (starts at base + 2.5s, ends at base + 3.0s)
+    this.playTone(4500, 0.5, offset);
   }
 
   /**
