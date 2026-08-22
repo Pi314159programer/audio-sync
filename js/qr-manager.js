@@ -32,6 +32,7 @@ export class QRManager {
 
     return {
       r: payload.range || '50m',
+      z: payload.zone || 'A',
       p: payload.partCount || 4,
       v: (payload.urls || []).map(extractId)
     };
@@ -40,12 +41,10 @@ export class QRManager {
   /**
    * Decompress payload on scanning
    */
-  /**
-   * Decompress payload on scanning
-   */
   decompressPayload(compact) {
     return {
       range: compact.r || '50m',
+      zone: compact.z || 'A',
       partCount: compact.p || 4,
       urls: (compact.v || []).map(id => id.length === 11 ? `https://www.youtube.com/watch?v=${id}` : id),
       period: compact.per || 0.5,

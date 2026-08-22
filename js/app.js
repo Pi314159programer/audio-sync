@@ -295,7 +295,22 @@ class AppController {
       // Stop optical dynamic QR code animation
       this.qrManager.stopDynamicQR();
 
-      // Preserve Master's established t0 clock grid anchor
+      // Master One-Time Phase Error Zeroing Compensation
+      const now = performance.now();
+      const periodMs = this.syncEngine.period * 1000;
+      const currentSelfM = ((now - this.syncEngine.t0) % periodMs + periodMs) % periodMs;
+
+      const totalFrames = Math.max(1, Math.round(periodMs / 25));
+      const targetQrM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
+
+      let phaseErr = targetQrM - currentSelfM;
+      if (phaseErr > periodMs / 2) phaseErr -= periodMs;
+      if (phaseErr < -periodMs / 2) phaseErr += periodMs;
+
+      // Adjust t0 once on this transition cycle to eliminate phase error to 0ms
+      this.syncEngine.t0 = this.syncEngine.t0 - phaseErr;
+      this.isMasterLocked = true;
+
       this.onCalibrationCompleted();
     });
 
@@ -374,7 +389,14 @@ class AppController {
   onSlaveQRScanned(data, reconstructedFile) {
     this.config = data;
     this.reconstructedAudioFile = reconstructedFile;
+
+    // Force Slave range, zone, AND period length to match Master's exact zone!
+    if (data.range) this.config.range = data.range;
+    if (data.zone) this.config.zone = data.zone;
     this.syncEngine.configureRange(this.config.range);
+    if (data.period) {
+      this.syncEngine.period = data.period;
+    }
 
     // Perform High-Precision Multi-Cycle Optical Clock Alignment from Dynamic QR Stream
     if (data.alignedT0) {
@@ -405,6 +427,19 @@ class AppController {
         grid.querySelectorAll('.part-select-btn').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
         this.assignedPart = i;
+
+        // Slave One-Time Phase Error Zeroing Compensation
+        const now = performance.now();
+        const periodMs = this.syncEngine.period * 1000;
+        const currentSelfM = ((now - this.syncEngine.t0) % periodMs + periodMs) % periodMs;
+        const targetM = (this.config && this.config.masterM !== undefined) ? this.config.masterM : 0;
+
+        let phaseErr = targetM - currentSelfM;
+        if (phaseErr > periodMs / 2) phaseErr -= periodMs;
+        if (phaseErr < -periodMs / 2) phaseErr += periodMs;
+
+        // Adjust t0 once on this transition cycle to eliminate phase error to 0ms
+        this.syncEngine.t0 = this.syncEngine.t0 - phaseErr;
 
         // Transition directly to Full White Interface (View 8) for audio tap verification
         this.showView('view-white-screen');
