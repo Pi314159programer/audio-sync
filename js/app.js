@@ -63,6 +63,74 @@ class AppController {
   }
 
   /**
+   * Compress uploaded audio file to low sample rate mono PCM WAV (~20KB-40KB)
+   * Ensures QR code modules remain large, low-density, and ultra-fast to transmit!
+   */
+  async compressAudioBuffer(rawBuffer) {
+    try {
+      if (!rawBuffer || rawBuffer.byteLength < 40 * 1024) return rawBuffer;
+
+      await this.am.init();
+      const ctx = this.am.ctx;
+      const audioBuffer = await ctx.decodeAudioData(rawBuffer.slice(0));
+
+      const duration = Math.min(8, audioBuffer.duration); // Cap calibration audio to max 8s
+      const targetSampleRate = 11025; // 11kHz low sample rate for fast QR transfer
+      const totalSamples = Math.floor(duration * targetSampleRate);
+
+      const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, totalSamples, targetSampleRate);
+      const src = offlineCtx.createBufferSource();
+      src.buffer = audioBuffer;
+      src.connect(offlineCtx.destination);
+      src.start(0);
+
+      const renderedBuffer = await offlineCtx.startRendering();
+      const channelData = renderedBuffer.getChannelData(0);
+
+      const wavHeaderSize = 44;
+      const pcmBuffer = new Uint8Array(wavHeaderSize + channelData.length);
+      
+      const writeString = (buf, offset, str) => {
+        for (let i = 0; i < str.length; i++) buf[offset + i] = str.charCodeAt(i);
+      };
+      const writeUint32 = (buf, offset, val) => {
+        buf[offset] = val & 0xff;
+        buf[offset+1] = (val >> 8) & 0xff;
+        buf[offset+2] = (val >> 16) & 0xff;
+        buf[offset+3] = (val >> 24) & 0xff;
+      };
+      const writeUint16 = (buf, offset, val) => {
+        buf[offset] = val & 0xff;
+        buf[offset+1] = (val >> 8) & 0xff;
+      };
+
+      writeString(pcmBuffer, 0, 'RIFF');
+      writeUint32(pcmBuffer, 4, 36 + channelData.length);
+      writeString(pcmBuffer, 8, 'WAVE');
+      writeString(pcmBuffer, 12, 'fmt ');
+      writeUint32(pcmBuffer, 16, 16);
+      writeUint16(pcmBuffer, 20, 1); // PCM
+      writeUint16(pcmBuffer, 22, 1); // Mono
+      writeUint32(pcmBuffer, 24, targetSampleRate);
+      writeUint32(pcmBuffer, 28, targetSampleRate);
+      writeUint16(pcmBuffer, 32, 1); // Block align
+      writeUint16(pcmBuffer, 34, 8); // 8-bit
+      writeString(pcmBuffer, 36, 'data');
+      writeUint32(pcmBuffer, 40, channelData.length);
+
+      for (let i = 0; i < channelData.length; i++) {
+        const s = Math.max(-1, Math.min(1, channelData[i]));
+        pcmBuffer[wavHeaderSize + i] = Math.floor((s + 1) * 127.5);
+      }
+
+      return pcmBuffer.buffer;
+    } catch (err) {
+      console.warn("Audio compression fallback to raw buffer:", err);
+      return rawBuffer;
+    }
+  }
+
+  /**
    * Helper to switch active view container
    */
   showView(viewId) {
@@ -149,7 +217,7 @@ class AppController {
 
     const audioFileInput = document.getElementById('input-audio-file');
     if (audioFileInput) {
-      audioFileInput.addEventListener('change', (e) => {
+      audioFileInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         const badge = document.getElementById('audio-file-badge');
         if (file) {
@@ -161,12 +229,15 @@ class AppController {
             if (badge) badge.innerText = '檔案過大 (>800KB)';
             return;
           }
+          if (badge) badge.innerText = '正在最佳化壓縮音檔中...';
           const reader = new FileReader();
-          reader.onload = (evt) => {
-            this.audioFileBuffer = evt.target.result;
+          reader.onload = async (evt) => {
+            const rawBuffer = evt.target.result;
+            const compressedBuffer = await this.compressAudioBuffer(rawBuffer);
+            this.audioFileBuffer = compressedBuffer;
             this.audioFileName = file.name;
-            const sizeKb = Math.round(file.size / 1024);
-            if (badge) badge.innerText = `已載入: ${file.name} (${sizeKb} KB)`;
+            const sizeKb = Math.round(compressedBuffer.byteLength / 1024);
+            if (badge) badge.innerText = `已載入極速音檔: ${file.name} (${sizeKb} KB)`;
           };
           reader.readAsArrayBuffer(file);
         } else {
