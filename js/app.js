@@ -22,7 +22,15 @@ class AppController {
       range: '50m',
       zone: 'A',
       partCount: 4,
+      tones: [261, 293, 329, 392, 440], // Default pentatonic tones
       urls: []
+    };
+
+    this.tonePresets = {
+      pentatonic: [261, 293, 329, 392, 440],
+      healing: [432, 528, 639, 741, 852],
+      rainbow: [261, 329, 392, 493, 587],
+      chords: [220, 261, 329, 440, 659]
     };
 
     this.assignedPart = 1; // Selected part for this device (1 to N)
@@ -62,7 +70,8 @@ class AppController {
       'view-slave-setup',
       'view-syncing',
       'view-master-control',
-      'view-slave-status'
+      'view-slave-status',
+      'view-white-screen'
     ];
     views.forEach(id => {
       const el = document.getElementById(id);
@@ -120,6 +129,14 @@ class AppController {
       this.config.partCount = parseInt(e.target.value);
     });
 
+    const tonesSelect = document.getElementById('select-5tones');
+    if (tonesSelect) {
+      tonesSelect.addEventListener('change', (e) => {
+        const key = e.target.value;
+        this.config.tones = this.tonePresets[key] || this.tonePresets.pentatonic;
+      });
+    }
+
     const ytInput = document.getElementById('input-yt-url');
     document.getElementById('btn-add-yt').addEventListener('click', () => {
       const url = ytInput.value.trim();
@@ -137,28 +154,20 @@ class AppController {
         this.renderYTList();
       }
       this.showView('view-master-qr');
-      this.qrManager.renderQRCode('qrcode-canvas-container', this.config);
+      // Start Optical Dynamic Animated QR Code Generator
+      this.qrManager.startDynamicQR('qrcode-canvas-container', this.config);
     });
 
-    // 3. Master Sync Trigger Button
+    // 3. Master Sync Trigger Button (Direct View Transition)
     document.getElementById('btn-start-sync-master').addEventListener('click', async () => {
-      this.showView('view-syncing');
-      const titleEl = document.getElementById('sync-status-title');
-      const subEl = document.getElementById('sync-status-sub');
-      if (titleEl) titleEl.innerText = '正在同步 (20秒)...';
-      if (subEl) subEl.innerText = '透過耦合振盪器原理進行共用 clk 聲學校正中';
+      // Stop optical dynamic QR code animation
+      this.qrManager.stopDynamicQR();
 
       this.syncEngine.configureRange(this.config.range);
-      
-      this.syncEngine.on('syncProgress', (data) => {
-        this.updateSyncProgressUI(data);
-      });
+      this.syncEngine.isCalibrated = true;
+      this.syncEngine.t0 = performance.now();
 
-      this.syncEngine.on('syncComplete', () => {
-        this.onCalibrationCompleted();
-      });
-
-      await this.syncEngine.startCalibration(true);
+      this.onCalibrationCompleted();
     });
 
     // 4. Slave Manual Input Fallback
@@ -232,6 +241,17 @@ class AppController {
     this.config = data;
     this.syncEngine.configureRange(this.config.range);
 
+    // Perform Optical Clock Alignment from Dynamic QR Frame
+    if (data.clk && data.scanTime) {
+      const periodMs = this.syncEngine.period * 1000;
+      const localTimeOffset = performance.now() - data.scanTime;
+      const estimatedMasterNow = data.clk + localTimeOffset;
+      this.syncEngine.t0 = performance.now() - (estimatedMasterNow % periodMs);
+    } else {
+      this.syncEngine.t0 = performance.now();
+    }
+    this.syncEngine.isCalibrated = true;
+
     // Hide scanner, show part selection grid
     document.getElementById('scanner-box').classList.add('hidden');
     document.getElementById('part-selection-box').classList.remove('hidden');
@@ -249,42 +269,37 @@ class AppController {
         btn.classList.add('selected');
         this.assignedPart = i;
 
-        // Hide part select, show waiting box
-        document.getElementById('part-selection-box').classList.add('hidden');
-        document.getElementById('slave-waiting-box').classList.remove('hidden');
-
-        // Start listening for master 528Hz calibration signal
-        this.listenForSlaveCalibration();
+        // Transition directly to Full White Interface (View 8) for 5-tone tap verification
+        this.showView('view-white-screen');
+        this.setupSlaveWhiteScreenTap();
       });
       grid.appendChild(btn);
     }
   }
 
-  async listenForSlaveCalibration() {
-    this.showView('view-syncing');
-    const titleEl = document.getElementById('sync-status-title');
-    const subEl = document.getElementById('sync-status-sub');
-    if (titleEl) titleEl.innerText = '等待主控者聲學脈衝...';
-    if (subEl) subEl.innerText = `已選擇第 ${this.assignedPart} 聲部，請等待主控者按下「同步」發起校正`;
+  setupSlaveWhiteScreenTap() {
+    const whiteView = document.getElementById('view-white-screen');
+    if (!whiteView) return;
 
-    await this.am.startMicrophone();
-    this.dsp.start();
+    let hasTapped = false;
+    const onTap = async () => {
+      if (hasTapped) return;
+      hasTapped = true;
+      whiteView.removeEventListener('click', onTap);
+      whiteView.removeEventListener('touchstart', onTap);
 
-    let slaveCalibrationStarted = false;
-    this.dsp.on('pulse528', () => {
-      if (!slaveCalibrationStarted) {
-        slaveCalibrationStarted = true;
-        if (titleEl) titleEl.innerText = '正在同步 (20秒)...';
-        if (subEl) subEl.innerText = '透過耦合振盪器原理進行共用 clk 聲學校正中';
-        this.syncEngine.on('syncProgress', (data) => {
-          this.updateSyncProgressUI(data);
-        });
-        this.syncEngine.on('syncComplete', () => {
-          this.onCalibrationCompleted();
-        });
-        this.syncEngine.startCalibration(false);
-      }
-    });
+      const subtext = document.querySelector('.white-screen-subtext');
+      if (subtext) subtext.innerText = '🎵 正在發出傳輸之 5 音驗證中...';
+
+      await this.am.init();
+      const tones = this.config.tones || [261, 293, 329, 392, 440];
+      this.toneGen.playFiveTones(tones, () => {
+        this.onCalibrationCompleted();
+      });
+    };
+
+    whiteView.addEventListener('click', onTap);
+    whiteView.addEventListener('touchstart', onTap);
   }
 
   onCalibrationCompleted() {

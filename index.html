@@ -79,6 +79,16 @@
       </div>
 
       <div class="form-group">
+        <label class="form-label" for="select-5tones">校正 5 音設定</label>
+        <select id="select-5tones" class="form-select">
+          <option value="pentatonic" selected>經典五音「宮商角徵羽」(C4,D4,E4,G4,A4)</option>
+          <option value="healing">療癒頻率 (432, 528, 639, 741, 852 Hz)</option>
+          <option value="rainbow">彩虹五階 (C4, E4, G4, B4, D5)</option>
+          <option value="chords">和弦五階 (A3, C4, E4, A4, E5)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
         <label class="form-label">
           <span>YouTube 連結</span>
           <span id="yt-count-label" style="font-size:0.75rem; color:var(--text-muted);">0 / 50</span>
@@ -227,6 +237,15 @@
       </div>
       <div id="slave-music-note" class="music-note-icon">🎵</div>
       <div id="slave-part-badge" class="slave-part-badge">第 1 聲部 (已暫停)</div>
+    </div>
+
+    <!-- VIEW 8: SLAVE FULLWHITE TAP INTERFACE -->
+    <div id="view-white-screen" class="white-fullscreen-view hidden">
+      <div class="white-screen-card">
+        <div class="white-screen-icon">✨</div>
+        <div class="white-screen-title">光學同步完成</div>
+        <div class="white-screen-subtext">請點擊螢幕任意處發出傳輸之 5 音驗證</div>
+      </div>
     </div>
 
   </div>

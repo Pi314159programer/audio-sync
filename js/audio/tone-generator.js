@@ -130,4 +130,29 @@ export class ToneGenerator {
     this.playTone(freq, 0.05, base + 0.10);
     this.playTone(freq, 0.05, base + 0.20);
   }
+
+  /**
+   * Play 5 Transmitted Musical Tones in sequence (0.3s tone + 0.1s gap)
+   * @param {number[]} tones Frequencies array of 5 tones
+   * @param {Function} [onComplete] Callback when sequence finishes
+   */
+  playFiveTones(tones = [261, 293, 329, 392, 440], onComplete = null) {
+    if (!this.am.ctx) return;
+    const ctx = this.am.ctx;
+    const base = ctx.currentTime;
+    const toneDuration = 0.3;
+    const gap = 0.1;
+
+    const list = Array.isArray(tones) && tones.length === 5 ? tones : [261, 293, 329, 392, 440];
+
+    list.forEach((freq, idx) => {
+      const startTime = base + idx * (toneDuration + gap);
+      this.playTone(freq, toneDuration, startTime);
+    });
+
+    const totalTimeMs = (list.length * (toneDuration + gap)) * 1000;
+    if (onComplete) {
+      setTimeout(onComplete, totalTimeMs + 100);
+    }
+  }
 }

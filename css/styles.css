@@ -739,6 +739,58 @@ html, body {
   animation: pulseMusicNote 1.2s infinite ease-in-out;
 }
 
+/* FULL WHITE INTERFACE FOR SLAVE TAP VERIFICATION */
+.white-fullscreen-view {
+  width: 100vw;
+  height: 100vh;
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-color: #ffffff !important;
+  color: #0f172a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  cursor: pointer;
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.white-screen-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  padding: 2rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.white-screen-icon {
+  font-size: 5rem;
+  animation: pulseGlow 1.8s infinite ease-in-out;
+}
+
+.white-screen-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.white-screen-subtext {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #64748b;
+  max-width: 320px;
+  line-height: 1.5;
+  background: rgba(15, 23, 42, 0.06);
+  padding: 0.75rem 1.25rem;
+  border-radius: 30px;
+}
+
 /* Hidden elements helper */
 .hidden {
   display: none !important;
