@@ -248,19 +248,22 @@ class AppController {
     const periodMs = (this.syncEngine.period || 0.5) * 1000;
     this.masterT0 = performance.now();
     let lastRenderedCycle = -1;
+    let flashOnTime = 0;
 
     const loop = () => {
       if (!this.masterT0) return;
-      const elapsed = performance.now() - this.masterT0;
+      const now = performance.now();
+      const elapsed = now - this.masterT0;
       const currentCycle = Math.floor(elapsed / periodMs);
       const cnt = Math.floor(elapsed % periodMs);
 
       const ball = document.getElementById('master-pulse-ball');
       if (ball) {
-        if (currentCycle !== lastRenderedCycle && cnt <= 10) {
+        if (currentCycle !== lastRenderedCycle) {
           lastRenderedCycle = currentCycle;
+          flashOnTime = now;
           ball.classList.add('active');
-        } else if (cnt > 10) {
+        } else if (now - flashOnTime >= 10 || cnt > 10) {
           ball.classList.remove('active');
         }
       }
@@ -300,6 +303,7 @@ class AppController {
     this.slaveT0 = null;
     this.slaveActiveCycleLimit = periodMs;
     let slaveLastRenderedCycle = -1;
+    let slaveFlashOnTime = 0;
 
     // Slave Pulse Ball requestAnimationFrame Loop
     if (this.slaveAnimFrameId) cancelAnimationFrame(this.slaveAnimFrameId);
@@ -320,10 +324,11 @@ class AppController {
         const cnt = Math.floor(elapsed % periodMs);
         const ball = document.getElementById('slave-pulse-ball');
         if (ball) {
-          if (currentCycle !== slaveLastRenderedCycle && cnt <= 10) {
+          if (currentCycle !== slaveLastRenderedCycle) {
             slaveLastRenderedCycle = currentCycle;
+            slaveFlashOnTime = now;
             ball.classList.add('active');
-          } else if (cnt > 10) {
+          } else if (now - slaveFlashOnTime >= 10 || cnt > 10) {
             ball.classList.remove('active');
           }
         }
@@ -381,9 +386,10 @@ class AppController {
       const cnt = Math.floor((flashTime - this.slaveT0) % periodMs);
 
       if (cnt >= 5 && cnt <= 15) {
-        // Ideal window (5 <= cnt <= 15)
+        // Ideal window (5 <= cnt <= 15) -> Fix limit to standard periodMs (e.g. 2000ms / 1999ms limit)
+        this.slaveActiveCycleLimit = periodMs;
         this.slaveConsecutiveLocks++;
-        if (statusText) statusText.innerText = `脈衝同步對齊中 (${this.slaveConsecutiveLocks}/5) [cnt: ${cnt}]`;
+        if (statusText) statusText.innerText = `已落入範圍！固定上限測試 (${this.slaveConsecutiveLocks}/5) [cnt: ${cnt}]`;
 
         if (this.slaveConsecutiveLocks >= 5) {
           // Calibration Complete!
