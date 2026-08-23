@@ -385,11 +385,11 @@ class AppController {
     if (this.slaveSyncState === 'NUDGE_AND_VERIFY') {
       const cnt = Math.floor((flashTime - this.slaveT0) % periodMs);
 
-      if (cnt >= 0 && cnt <= 25) {
-        // Ideal window (0 <= cnt <= 25) -> Fix limit to standard periodMs (e.g. 2000ms / 1999ms limit)
+      if (cnt >= 0 && cnt <= 30) {
+        // Ideal window (0 <= cnt <= 30) -> Fix limit to standard periodMs (e.g. 2000ms / 1999ms limit)
         this.slaveActiveCycleLimit = periodMs;
         this.slaveConsecutiveLocks++;
-        if (statusText) statusText.innerText = `已落入範圍 (0~25)！固定上限測試 (${this.slaveConsecutiveLocks}/5) [cnt: ${cnt}]`;
+        if (statusText) statusText.innerText = `已落入範圍 (0~30)！固定上限測試 (${this.slaveConsecutiveLocks}/5) [cnt: ${cnt}]`;
 
         if (this.slaveConsecutiveLocks >= 5) {
           // Calibration Complete!
@@ -404,8 +404,8 @@ class AppController {
           }, 600);
         }
       } else {
-        // Outside 0~25 -> Adjust current cycle limit by offset
-        const offset = cnt - 10;
+        // Outside 0~30 -> Adjust current cycle limit by offset
+        const offset = cnt - 15;
         this.slaveActiveCycleLimit = periodMs + offset;
         this.slaveConsecutiveLocks = 0;
 
@@ -581,12 +581,17 @@ class AppController {
   // --- ACOUSTIC COMMAND DETECTION LISTENERS (FOR SLAVES) ---
 
   bindDSPCommandListeners() {
+    this.savedProgressSec = 0;
+
     // 1. Start Play Command (4000 Hz)
     this.dsp.on('cmdStart', () => {
       this.isPlaying = true;
-      const currentSec = this.ytPlayer.getCurrentTime();
-      if (currentSec > 0.5) {
-        this.ytPlayer.seekTo(currentSec);
+      let targetSec = this.savedProgressSec;
+      if (!targetSec || targetSec <= 0) {
+        targetSec = this.ytPlayer.getCurrentTime();
+      }
+      if (targetSec > 0) {
+        this.ytPlayer.seekTo(targetSec);
       }
       this.ytPlayer.play();
       this.updateSlaveUIStatus();
@@ -595,17 +600,19 @@ class AppController {
     // 2. Pause Command (5000 Hz)
     this.dsp.on('cmdPause', () => {
       this.isPlaying = false;
+      const cur = this.ytPlayer.getCurrentTime();
+      if (cur > 0) {
+        this.savedProgressSec = cur;
+      }
       this.ytPlayer.pause();
       this.updateSlaveUIStatus();
     });
 
     // 3. Progress Sync Command (4500Hz + 10x0.2s FSK + 4500Hz)
     this.dsp.on('cmdProgressSync', (timeSec) => {
+      this.savedProgressSec = timeSec;
       if (!this.isPlaying) {
-        const current = this.ytPlayer.getCurrentTime();
-        if (Math.abs(current - timeSec) > 1.0) {
-          this.ytPlayer.seekTo(timeSec);
-        }
+        this.ytPlayer.seekTo(timeSec);
       }
     });
 
