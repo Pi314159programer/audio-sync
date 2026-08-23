@@ -255,7 +255,6 @@ class AppController {
       const now = performance.now();
       const elapsed = now - this.masterT0;
       const currentCycle = Math.floor(elapsed / periodMs);
-      const cnt = Math.floor(elapsed % periodMs);
 
       const ball = document.getElementById('master-pulse-ball');
       const sideBall = document.getElementById('master-side-pulse-ball');
@@ -265,18 +264,12 @@ class AppController {
         flashOnTime = now;
         if (ball) ball.classList.add('active');
         if (sideBall) sideBall.classList.add('active');
-      }
-
-      // Large calibration pulse ball (10ms duration, cnt 0..10)
-      if (ball) {
-        if (now - flashOnTime >= 10 || cnt > 10) {
+      } else {
+        // Remove active class ONLY on subsequent animation frames
+        if (ball && (now - flashOnTime >= 10)) {
           ball.classList.remove('active');
         }
-      }
-
-      // Small side pulse ball in control console (0.1s / 100ms duration, cnt 0..100)
-      if (sideBall) {
-        if (now - flashOnTime >= 100 || cnt > 100) {
+        if (sideBall && (now - flashOnTime >= 100)) {
           sideBall.classList.remove('active');
         }
       }
@@ -473,18 +466,12 @@ class AppController {
           slaveFlashOnTime = now;
           if (ball) ball.classList.add('active');
           if (sideBall) sideBall.classList.add('active');
-        }
-
-        // Large calibration pulse ball (10ms duration, cnt 0..10)
-        if (ball) {
-          if (now - slaveFlashOnTime >= 10 || cnt > 10) {
+        } else {
+          // Remove active class ONLY on subsequent animation frames
+          if (ball && (now - slaveFlashOnTime >= 10)) {
             ball.classList.remove('active');
           }
-        }
-
-        // Small side pulse ball in status view (0.1s / 100ms duration, cnt 0..100)
-        if (sideBall) {
-          if (now - slaveFlashOnTime >= 100 || cnt > 100) {
+          if (sideBall && (now - slaveFlashOnTime >= 100)) {
             sideBall.classList.remove('active');
           }
         }
