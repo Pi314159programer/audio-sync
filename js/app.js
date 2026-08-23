@@ -248,26 +248,30 @@ class AppController {
     const periodMs = (this.syncEngine.period || 0.5) * 1000;
     this.masterT0 = performance.now();
 
-    this.masterClockTimer = setInterval(() => {
+    const loop = () => {
+      if (!this.masterT0) return;
       const elapsed = performance.now() - this.masterT0;
       const cnt = Math.floor(elapsed % periodMs);
 
       const ball = document.getElementById('master-pulse-ball');
       if (ball) {
-        if (cnt >= 0 && cnt <= 10) {
+        if (cnt >= 0 && cnt <= 30) {
           ball.classList.add('active');
         } else {
           ball.classList.remove('active');
         }
       }
-    }, 1);
+      this.masterAnimFrameId = requestAnimationFrame(loop);
+    };
+    loop();
   }
 
   stopMasterClockLoop() {
-    if (this.masterClockTimer) {
-      clearInterval(this.masterClockTimer);
-      this.masterClockTimer = null;
+    if (this.masterAnimFrameId) {
+      cancelAnimationFrame(this.masterAnimFrameId);
+      this.masterAnimFrameId = null;
     }
+    this.masterT0 = null;
   }
 
   // --- SLAVE OPTICAL SCANNING & CLK ALIGNMENT ---
@@ -293,31 +297,36 @@ class AppController {
     this.slaveT0 = null;
     this.slaveActiveCycleLimit = periodMs;
 
-    // Slave Pulse Ball Timer
-    if (this.slaveClockTimer) clearInterval(this.slaveClockTimer);
-    this.slaveClockTimer = setInterval(() => {
-      if (!this.slaveT0) return;
+    // Slave Pulse Ball requestAnimationFrame Loop
+    if (this.slaveAnimFrameId) cancelAnimationFrame(this.slaveAnimFrameId);
 
-      const now = performance.now();
-      let elapsed = now - this.slaveT0;
-      const activeLimit = this.slaveActiveCycleLimit;
+    const slaveLoop = () => {
+      if (this.slaveT0) {
+        const now = performance.now();
+        let elapsed = now - this.slaveT0;
+        const activeLimit = this.slaveActiveCycleLimit;
 
-      if (elapsed >= activeLimit) {
-        this.slaveT0 += activeLimit;
-        this.slaveActiveCycleLimit = periodMs; // Reset back to standard periodMs for subsequent cycles
-        elapsed = now - this.slaveT0;
-      }
+        if (elapsed >= activeLimit) {
+          this.slaveT0 += activeLimit;
+          this.slaveActiveCycleLimit = periodMs; // Reset back to standard periodMs for subsequent cycles
+          elapsed = now - this.slaveT0;
+        }
 
-      const cnt = Math.floor(elapsed % periodMs);
-      const ball = document.getElementById('slave-pulse-ball');
-      if (ball) {
-        if (cnt >= 0 && cnt <= 10) {
-          ball.classList.add('active');
-        } else {
-          ball.classList.remove('active');
+        const cnt = Math.floor(elapsed % periodMs);
+        const ball = document.getElementById('slave-pulse-ball');
+        if (ball) {
+          if (cnt >= 0 && cnt <= 30) {
+            ball.classList.add('active');
+          } else {
+            ball.classList.remove('active');
+          }
         }
       }
-    }, 1);
+      if (this.slaveSyncState !== 'COMPLETE') {
+        this.slaveAnimFrameId = requestAnimationFrame(slaveLoop);
+      }
+    };
+    slaveLoop();
 
     // Start Camera Optical Flash Detector
     this.detector = new OpticalFlashDetector(null, (flashTime) => {
@@ -377,7 +386,7 @@ class AppController {
 
           setTimeout(() => {
             if (this.detector) this.detector.stop();
-            if (this.slaveClockTimer) clearInterval(this.slaveClockTimer);
+            if (this.slaveAnimFrameId) cancelAnimationFrame(this.slaveAnimFrameId);
             this.showView('view-slave-part-select');
             this.renderSlavePartSelectionGrid();
           }, 600);
