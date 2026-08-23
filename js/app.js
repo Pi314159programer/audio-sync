@@ -4,7 +4,6 @@ import { DSPAnalyzer } from './audio/dsp-analyzer.js';
 import { SyncEngine } from './audio/sync-engine.js';
 import { YouTubePlayerManager } from './youtube-player.js';
 import { QRManager } from './qr-manager.js';
-import { VolumeChart } from './audio/volume-chart.js';
 
 class AppController {
   constructor() {
@@ -14,7 +13,6 @@ class AppController {
     this.syncEngine = new SyncEngine(this.am, this.toneGen, this.dsp);
     this.ytPlayer = new YouTubePlayerManager();
     this.qrManager = new QRManager();
-    this.volumeChart = null;
 
     // App state
     this.role = null; // 'master' or 'slave'
@@ -22,27 +20,14 @@ class AppController {
       range: '50m',
       zone: 'A',
       partCount: 4,
-      tones: [261, 293, 329, 392, 440], // Default pentatonic tones
       urls: []
-    };
-
-    this.tonePresets = {
-      pentatonic: [261, 293, 329, 392, 440],
-      healing: [432, 528, 639, 741, 852],
-      rainbow: [261, 329, 392, 493, 587],
-      chords: [220, 261, 329, 440, 659]
     };
 
     this.assignedPart = 1; // Selected part for this device (1 to N)
     this.isPlaying = false;
     this.isMuted = false;
     this.partStates = {}; // { 1: true, 2: true, ... } true=playing, false=muted
-    this.pauseSyncTimer = null;
-    this.phaseAdjustmentQueue = []; // Queued dynamic cycle limits for smooth phase elimination
     this.seekWasAdjusted = false;
-    this.audioFileBuffer = null;
-    this.audioFileName = '';
-    this.reconstructedAudioFile = null;
 
     // Voice Part Color Mapping
     this.partColors = {
@@ -59,76 +44,7 @@ class AppController {
 
   async init() {
     this.bindDOMEvents();
-    this.volumeChart = new VolumeChart('canvas-528-volume');
     await this.ytPlayer.init('yt-player');
-  }
-
-  /**
-   * Compress uploaded audio file to low sample rate mono PCM WAV (~20KB-40KB)
-   * Ensures QR code modules remain large, low-density, and ultra-fast to transmit!
-   */
-  async compressAudioBuffer(rawBuffer) {
-    try {
-      if (!rawBuffer || rawBuffer.byteLength < 40 * 1024) return rawBuffer;
-
-      await this.am.init();
-      const ctx = this.am.ctx;
-      const audioBuffer = await ctx.decodeAudioData(rawBuffer.slice(0));
-
-      const duration = Math.min(8, audioBuffer.duration); // Cap calibration audio to max 8s
-      const targetSampleRate = 11025; // 11kHz low sample rate for fast QR transfer
-      const totalSamples = Math.floor(duration * targetSampleRate);
-
-      const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, totalSamples, targetSampleRate);
-      const src = offlineCtx.createBufferSource();
-      src.buffer = audioBuffer;
-      src.connect(offlineCtx.destination);
-      src.start(0);
-
-      const renderedBuffer = await offlineCtx.startRendering();
-      const channelData = renderedBuffer.getChannelData(0);
-
-      const wavHeaderSize = 44;
-      const pcmBuffer = new Uint8Array(wavHeaderSize + channelData.length);
-      
-      const writeString = (buf, offset, str) => {
-        for (let i = 0; i < str.length; i++) buf[offset + i] = str.charCodeAt(i);
-      };
-      const writeUint32 = (buf, offset, val) => {
-        buf[offset] = val & 0xff;
-        buf[offset+1] = (val >> 8) & 0xff;
-        buf[offset+2] = (val >> 16) & 0xff;
-        buf[offset+3] = (val >> 24) & 0xff;
-      };
-      const writeUint16 = (buf, offset, val) => {
-        buf[offset] = val & 0xff;
-        buf[offset+1] = (val >> 8) & 0xff;
-      };
-
-      writeString(pcmBuffer, 0, 'RIFF');
-      writeUint32(pcmBuffer, 4, 36 + channelData.length);
-      writeString(pcmBuffer, 8, 'WAVE');
-      writeString(pcmBuffer, 12, 'fmt ');
-      writeUint32(pcmBuffer, 16, 16);
-      writeUint16(pcmBuffer, 20, 1); // PCM
-      writeUint16(pcmBuffer, 22, 1); // Mono
-      writeUint32(pcmBuffer, 24, targetSampleRate);
-      writeUint32(pcmBuffer, 28, targetSampleRate);
-      writeUint16(pcmBuffer, 32, 1); // Block align
-      writeUint16(pcmBuffer, 34, 8); // 8-bit
-      writeString(pcmBuffer, 36, 'data');
-      writeUint32(pcmBuffer, 40, channelData.length);
-
-      for (let i = 0; i < channelData.length; i++) {
-        const s = Math.max(-1, Math.min(1, channelData[i]));
-        pcmBuffer[wavHeaderSize + i] = Math.floor((s + 1) * 127.5);
-      }
-
-      return pcmBuffer.buffer;
-    } catch (err) {
-      console.warn("Audio compression fallback to raw buffer:", err);
-      return rawBuffer;
-    }
   }
 
   /**
@@ -140,10 +56,8 @@ class AppController {
       'view-master-setup',
       'view-master-qr',
       'view-slave-setup',
-      'view-syncing',
       'view-master-control',
-      'view-slave-status',
-      'view-white-screen'
+      'view-slave-status'
     ];
     views.forEach(id => {
       const el = document.getElementById(id);
@@ -152,24 +66,6 @@ class AppController {
         else el.classList.add('hidden');
       }
     });
-
-    if (viewId === 'view-syncing' && this.volumeChart) {
-      this.volumeChart.start();
-    }
-  }
-
-  updateSyncProgressUI(data) {
-    const bar = document.getElementById('sync-progress-bar');
-    const label = document.getElementById('sync-progress-text');
-    if (bar) bar.style.width = `${data.percent}%`;
-    if (label) label.innerText = `${data.percent}% (${data.elapsedSec} / ${data.totalSec} 秒)`;
-  }
-
-  updateFountainProgressUI(progress) {
-    const bar = document.getElementById('fountain-progress-bar');
-    const text = document.getElementById('fountain-progress-text');
-    if (bar) bar.style.width = `${progress.percent}%`;
-    if (text) text.innerText = `${progress.percent}% (${progress.resolvedCount} / ${progress.totalBlocks} 封包)`;
   }
 
   bindDOMEvents() {
@@ -185,13 +81,9 @@ class AppController {
       await this.am.init();
       this.showView('view-slave-setup');
 
-      const progBox = document.getElementById('fountain-progress-container');
-      if (progBox) progBox.classList.remove('hidden');
-
       this.qrManager.startScanner(
         'reader',
-        (data, reconstructedFile) => this.onSlaveQRScanned(data, reconstructedFile),
-        (progress) => this.updateFountainProgressUI(progress)
+        (data) => this.onSlaveQRScanned(data)
       );
     });
 
@@ -202,52 +94,19 @@ class AppController {
       const zoneBadge = document.getElementById('range-zone-badge');
       if (['10m','20m','50m'].includes(this.config.range)) {
         this.config.zone = 'A';
-        zoneBadge.innerText = '區間 A (2Hz / 周期 0.5s)';
+        zoneBadge.innerText = '區間 A (周期 0.5s)';
       } else if (['70m','100m'].includes(this.config.range)) {
         this.config.zone = 'B';
-        zoneBadge.innerText = '區間 B (1Hz / 周期 1.0s)';
+        zoneBadge.innerText = '區間 B (周期 1.0s)';
       } else {
         this.config.zone = 'C';
-        zoneBadge.innerText = '區間 C (0.5Hz / 周期 2.0s)';
+        zoneBadge.innerText = '區間 C (周期 2.0s)';
       }
     });
 
     document.getElementById('select-parts').addEventListener('change', (e) => {
       this.config.partCount = parseInt(e.target.value);
     });
-
-    const audioFileInput = document.getElementById('input-audio-file');
-    if (audioFileInput) {
-      audioFileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        const badge = document.getElementById('audio-file-badge');
-        if (file) {
-          if (file.size > 800 * 1024) {
-            alert('檔案大小超過 800 KB 限制，請重新選擇較小的音檔！');
-            audioFileInput.value = '';
-            this.audioFileBuffer = null;
-            this.audioFileName = '';
-            if (badge) badge.innerText = '檔案過大 (>800KB)';
-            return;
-          }
-          if (badge) badge.innerText = '正在最佳化壓縮音檔中...';
-          const reader = new FileReader();
-          reader.onload = async (evt) => {
-            const rawBuffer = evt.target.result;
-            const compressedBuffer = await this.compressAudioBuffer(rawBuffer);
-            this.audioFileBuffer = compressedBuffer;
-            this.audioFileName = file.name;
-            const sizeKb = Math.round(compressedBuffer.byteLength / 1024);
-            if (badge) badge.innerText = `已載入極速音檔: ${file.name} (${sizeKb} KB)`;
-          };
-          reader.readAsArrayBuffer(file);
-        } else {
-          this.audioFileBuffer = null;
-          this.audioFileName = '';
-          if (badge) badge.innerText = '未選擇檔案';
-        }
-      });
-    }
 
     const ytInput = document.getElementById('input-yt-url');
     document.getElementById('btn-add-yt').addEventListener('click', () => {
@@ -267,33 +126,22 @@ class AppController {
       }
       this.showView('view-master-qr');
 
-      // Anchor Master's SyncEngine clock grid IMMEDIATELY on Frame 0 of QR code generation!
-      const masterT0 = performance.now();
       this.syncEngine.configureRange(this.config.range);
-      this.syncEngine.t0 = masterT0;
-      this.syncEngine.isCalibrated = true;
 
-      // Start Master's live clock pulse loop & Debug HUD updates right away
-      this.startClockPulseLoop();
-
-      // Start Optical Dynamic Animated QR Code Generator with Master's exact t0 anchor
-      this.qrManager.startDynamicQR(
+      // Generate Standard Static QR Code
+      this.qrManager.generateStaticQR(
         'qrcode-canvas-container',
-        this.config,
-        this.audioFileBuffer,
-        this.audioFileName,
-        masterT0
+        this.config
       );
     });
 
-    // 3. Master Sync Trigger Button (Direct View Transition)
-    document.getElementById('btn-start-sync-master').addEventListener('click', async () => {
-      // Stop optical dynamic QR code animation
-      this.qrManager.stopDynamicQR();
-
-      // Defer Two-Cycle Phase Error Shift to onCalibrationCompleted
-      this.onCalibrationCompleted();
-    });
+    // 3. Master Enter Control Console Button
+    const enterMasterBtn = document.getElementById('btn-enter-master-control');
+    if (enterMasterBtn) {
+      enterMasterBtn.addEventListener('click', () => {
+        this.enterMasterControlConsole();
+      });
+    }
 
     // 4. Slave Manual Input Fallback
     document.getElementById('btn-toggle-manual-input').addEventListener('click', () => {
@@ -306,7 +154,7 @@ class AppController {
       try {
         const rawData = JSON.parse(jsonStr);
         const data = this.qrManager.decompressPayload(rawData);
-        this.onSlaveQRScanned(data, null);
+        this.onSlaveQRScanned(data);
       } catch (err) {
         alert("格式錯誤，請確定輸入的是正確的 JSON 設定數據");
       }
@@ -332,7 +180,6 @@ class AppController {
       this.ytPlayer.seekTo(targetSec);
       document.getElementById('time-current').innerText = this.formatTime(targetSec);
 
-      // Automatically pause playback and transmit 5000Hz acoustic pause signal on next clk cycle
       if (this.isPlaying) {
         this.triggerMasterPause();
       }
@@ -367,33 +214,12 @@ class AppController {
     });
   }
 
-  onSlaveQRScanned(data, reconstructedFile) {
+  onSlaveQRScanned(data) {
     this.config = data;
-    this.reconstructedAudioFile = reconstructedFile;
 
-    // Force Slave range, zone, AND period length to match Master's exact zone!
     if (data.range) this.config.range = data.range;
     if (data.zone) this.config.zone = data.zone;
     this.syncEngine.configureRange(this.config.range);
-    if (data.period) {
-      this.syncEngine.period = data.period;
-    }
-
-    // Perform High-Precision Multi-Cycle Optical Clock Alignment from Dynamic QR Stream
-    if (data.alignedT0) {
-      this.syncEngine.t0 = data.alignedT0;
-    } else if (data.clk && data.scanTime) {
-      const periodMs = this.syncEngine.period * 1000;
-      const localTimeOffset = performance.now() - data.scanTime;
-      const estimatedMasterNow = data.clk + localTimeOffset;
-      this.syncEngine.t0 = performance.now() - (estimatedMasterNow % periodMs);
-    } else {
-      this.syncEngine.t0 = performance.now();
-    }
-    this.syncEngine.isCalibrated = true;
-
-    // Start Slave's live clock pulse loop & Debug HUD updates right away upon scanning
-    this.startClockPulseLoop();
 
     // Hide scanner, show part selection grid
     document.getElementById('scanner-box').classList.add('hidden');
@@ -407,102 +233,48 @@ class AppController {
       const btn = document.createElement('button');
       btn.className = 'part-select-btn';
       btn.innerText = `第 ${i} 聲部`;
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         grid.querySelectorAll('.part-select-btn').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
         this.assignedPart = i;
 
-        // Transition directly to Full White Interface (View 8) for audio tap verification
-        this.showView('view-white-screen');
-        this.setupSlaveWhiteScreenTap();
+        // Initialize audio & start listening on slave device
+        await this.am.init();
+        try {
+          await this.am.startMicrophone();
+          this.dsp.start();
+        } catch (err) {
+          console.warn("Could not start microphone on slave device:", err);
+        }
+
+        // Set playlist on slave YT player
+        this.ytPlayer.setPlaylist(this.config.urls);
+
+        // Pre-warm YouTube player
+        if (this.ytPlayer.isReady) {
+          this.ytPlayer.mute();
+          this.ytPlayer.play();
+          setTimeout(() => {
+            this.ytPlayer.pause();
+            this.ytPlayer.unmute();
+          }, 150);
+        }
+
+        // Transition directly to Slave Status View
+        this.showView('view-slave-status');
+        this.updateSlaveUIStatus();
       });
       grid.appendChild(btn);
     }
   }
 
-  setupSlaveWhiteScreenTap() {
-    const whiteView = document.getElementById('view-white-screen');
-    if (!whiteView) return;
-
-    const subtext = document.querySelector('.white-screen-subtext');
-    if (subtext) {
-      subtext.innerText = this.reconstructedAudioFile
-        ? '✨ 光學噴泉碼重組成功！請點擊螢幕任意處播放傳輸音檔驗證'
-        : '✨ 光學同步完成！請點擊螢幕任意處進入狀態介面';
-    }
-
-    let hasTapped = false;
-    const onTap = async () => {
-      if (hasTapped) return;
-      hasTapped = true;
-      whiteView.removeEventListener('click', onTap);
-      whiteView.removeEventListener('touchstart', onTap);
-
-      await this.am.init();
-
-      if (this.reconstructedAudioFile && this.reconstructedAudioFile.buffer) {
-        if (subtext) subtext.innerText = '🎵 正在播放主控者上傳之音檔中...';
-        try {
-          const ctx = this.am.ctx;
-          const audioBuffer = await ctx.decodeAudioData(this.reconstructedAudioFile.buffer.slice(0));
-          const source = ctx.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(ctx.destination);
-          source.onended = () => {
-            this.onCalibrationCompleted();
-          };
-          source.start(0);
-        } catch (err) {
-          console.warn("Could not decode reconstructed audio file, proceeding to status:", err);
-          this.onCalibrationCompleted();
-        }
-      } else {
-        this.onCalibrationCompleted();
-      }
-    };
-
-    whiteView.addEventListener('click', onTap);
-    whiteView.addEventListener('touchstart', onTap);
-  }
-
-  applyTwoCyclePhaseElimination(targetMOrExplicitErr) {
-    if (!this.syncEngine || !this.syncEngine.t0) return;
-
-    const now = performance.now();
-    const standardPeriodMs = this.syncEngine.period * 1000;
-
-    let phaseErr = 0;
-    if (typeof targetMOrExplicitErr === 'number' && this.role === 'master') {
-      const currentSelfM = ((now - this.syncEngine.t0) % standardPeriodMs + standardPeriodMs) % standardPeriodMs;
-      phaseErr = targetMOrExplicitErr - currentSelfM;
-      if (phaseErr > standardPeriodMs / 2) phaseErr -= standardPeriodMs;
-      if (phaseErr < -standardPeriodMs / 2) phaseErr += standardPeriodMs;
-    } else if (typeof targetMOrExplicitErr === 'number') {
-      phaseErr = targetMOrExplicitErr; // Explicit live Phase Error for Slave (e.g. +1ms)
-    }
-
-    const shift1 = Math.floor(phaseErr / 2);
-    const shift2 = phaseErr - shift1;
-
-    const limit1 = standardPeriodMs - shift1;
-    const limit2 = standardPeriodMs - shift2;
-
-    this.phaseAdjustmentQueue = [limit1, limit2];
-
-    console.log(`[Two-Cycle Smooth Limit Queue] Total Live Phase Error: ${phaseErr}ms.`);
-    console.log(`  -> Cycle 1 Limit: ${limit1}ms (Count 0..${Math.round(limit1 - 1)})`);
-    console.log(`  -> Cycle 2 Limit: ${limit2}ms (Count 0..${Math.round(limit2 - 1)})`);
-  }
-
-  async onCalibrationCompleted() {
-    // Initialize voice part default states (all enabled = true)
+  enterMasterControlConsole() {
     for (let i = 1; i <= Math.max(8, this.config.partCount); i++) {
       this.partStates[i] = true;
     }
 
     this.ytPlayer.setPlaylist(this.config.urls);
 
-    // Pre-warm YouTube player buffer for zero-latency start on mobile browsers
     if (this.ytPlayer.isReady) {
       this.ytPlayer.mute();
       this.ytPlayer.play();
@@ -512,136 +284,9 @@ class AppController {
       }, 150);
     }
 
-    // Start microphone & DSP Analyzer on Slave device so it receives acoustic play/pause signals
-    if (this.role === 'slave') {
-      try {
-        await this.am.startMicrophone();
-        this.dsp.start();
-      } catch (err) {
-        console.warn("Could not start microphone on slave device:", err);
-      }
-    }
-
-    // Start common clock visual pulse loop
-    this.startClockPulseLoop();
-
-    const periodMs = this.syncEngine.period * 1000;
-    if (this.role === 'master') {
-      const totalFrames = Math.max(1, Math.round(periodMs / 25));
-      const targetQrM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
-      this.applyTwoCyclePhaseElimination(targetQrM);
-
-      this.showView('view-master-control');
-      this.renderMasterPartButtons();
-      this.startMasterProgressUpdater();
-    } else {
-      const liveSlaveDiffMs = (this.lastDebugData && this.lastDebugData.diffMs !== undefined) ? this.lastDebugData.diffMs : 0;
-      this.applyTwoCyclePhaseElimination(liveSlaveDiffMs);
-
-      this.showView('view-slave-status');
-      this.updateSlaveUIStatus();
-    }
-  }
-
-  startClockPulseLoop() {
-    if (this.clockPulseLoopTimer) {
-      clearInterval(this.clockPulseLoopTimer);
-      this.clockPulseLoopTimer = null;
-    }
-
-    this.clockPulseLoopTimer = setInterval(() => {
-      if (!this.syncEngine.isCalibrated || !this.syncEngine.t0) return;
-
-      const now = performance.now();
-      const standardPeriodMs = this.syncEngine.period * 1000;
-
-      // Active cycle period limit (from phaseAdjustmentQueue or standardPeriodMs)
-      let activeLimit = standardPeriodMs;
-      if (this.phaseAdjustmentQueue && this.phaseAdjustmentQueue.length > 0) {
-        activeLimit = this.phaseAdjustmentQueue[0];
-      }
-
-      let elapsed = now - this.syncEngine.t0;
-
-      // Wrap cycle smoothly when elapsed hits activeLimit
-      while (elapsed >= activeLimit) {
-        this.syncEngine.t0 += activeLimit;
-        elapsed = now - this.syncEngine.t0;
-
-        if (this.phaseAdjustmentQueue && this.phaseAdjustmentQueue.length > 0) {
-          this.phaseAdjustmentQueue.shift();
-        }
-        activeLimit = (this.phaseAdjustmentQueue && this.phaseAdjustmentQueue.length > 0)
-          ? this.phaseAdjustmentQueue[0]
-          : standardPeriodMs;
-      }
-
-      const offsetInCycle = Math.max(0, Math.floor(elapsed));
-
-      // Pulse white ball for 250ms (or 50% of activeLimit) at start of each common clock cycle
-      const pulseDurationMs = Math.min(250, activeLimit * 0.5);
-      const isActive = offsetInCycle < pulseDurationMs;
-
-      const masterBall = document.getElementById('master-clk-ball');
-      const masterQrBall = document.getElementById('master-qr-clk-ball');
-      const slaveBall = document.getElementById('slave-clk-ball');
-      [masterBall, masterQrBall, slaveBall].filter(Boolean).forEach(ball => {
-        if (isActive) ball.classList.add('active');
-        else ball.classList.remove('active');
-      });
-
-      // Continuously update Real-time Live Debug HUD
-      this.updateDebugHUD(Math.round(offsetInCycle));
-    }, 20);
-  }
-
-  updateDebugHUD(selfM) {
-    const roleZoneEl = document.getElementById('db-role-zone');
-    const masterMEl = document.getElementById('db-master-m');
-    const slaveMEl = document.getElementById('db-slave-m');
-    const diffMsEl = document.getElementById('db-diff-ms');
-    const modeEl = document.getElementById('db-mode');
-
-    const periodMs = (this.syncEngine.period || 0.5) * 1000;
-    if (roleZoneEl) roleZoneEl.innerText = `${(this.role || 'device').toUpperCase()} (Zone ${this.config.zone || 'A'})`;
-
-    if (this.role === 'master') {
-      const totalFrames = Math.max(1, Math.round(periodMs / 25));
-      const qrFrameM = ((this.qrManager.frameSeq % totalFrames) * 25) % periodMs;
-
-      if (masterMEl) masterMEl.innerText = `${qrFrameM} ms`;
-      if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
-      if (diffMsEl) diffMsEl.innerText = `0 ms [EXACT]`;
-      if (modeEl) {
-        modeEl.innerText = 'MASTER (RUNNING)';
-        modeEl.style.color = '#4ade80';
-      }
-    } else {
-      if (slaveMEl) slaveMEl.innerText = `${selfM} ms`;
-      if (this.lastDebugData) {
-        if (masterMEl) masterMEl.innerText = `${this.lastDebugData.masterM !== undefined ? this.lastDebugData.masterM : 0} ms`;
-        if (diffMsEl) {
-          const diff = this.lastDebugData.diffMs || 0;
-          diffMsEl.innerText = `${diff > 0 ? '+' : ''}${diff} ms (${this.lastDebugData.absErr <= 30 ? '≤30ms' : '>30ms'})`;
-        }
-        if (modeEl) {
-          modeEl.innerText = this.lastDebugData.mode || 'LOCKED';
-          modeEl.style.color = this.lastDebugData.mode === 'LOCKED' ? '#4ade80' : (this.lastDebugData.mode === 'SOFT_NUDGE' ? '#fbbf24' : '#f87171');
-        }
-      }
-    }
-  }
-
-  updateFountainProgressUI(progress) {
-    const bar = document.getElementById('fountain-progress-bar');
-    const text = document.getElementById('fountain-progress-text');
-    if (bar) bar.style.width = `${progress.percent}%`;
-    if (text) text.innerText = `光學對齊 (${progress.mode || 'ALIGNING'}): ${progress.percent}%`;
-
-    this.lastDebugData = progress;
-    const locksEl = document.getElementById('db-locks');
-    if (locksEl) locksEl.innerText = `${progress.cycleCount || 0} / 3 (${progress.mode || 'ALIGNING'})`;
-    this.updateDebugHUD(progress.selfM || 0);
+    this.showView('view-master-control');
+    this.renderMasterPartButtons();
+    this.startMasterProgressUpdater();
   }
 
   renderMasterPartButtons() {
@@ -705,24 +350,11 @@ class AppController {
     const playBtn = document.getElementById('btn-play-pause');
     if (playBtn) playBtn.disabled = true;
 
-    // Stop continuous pause sync loop
-    this.stopPauseProgressLoop();
-
-    // Transmit final 3.0s progress calibration signal
     const currentSec = this.ytPlayer.getCurrentTime();
     this.toneGen.playProgressSignal(currentSec);
 
-    // Wait 3.0s for progress signal to complete, then trigger start signal on next common clk cycle
     setTimeout(() => {
-      const delayToNextCycle = this.syncEngine.getTimeToNextCycleStart();
-      const periodMs = this.syncEngine.period * 1000;
-
-      // Schedule 4000Hz start tone at next cycle + 50ms
-      setTimeout(() => {
-        this.toneGen.playStartSignal();
-      }, delayToNextCycle + 50);
-
-      // Synchronously start playback on cycle boundary immediately following start tone
+      this.toneGen.playStartSignal();
       setTimeout(() => {
         this.isPlaying = true;
         this.ytPlayer.play();
@@ -731,25 +363,17 @@ class AppController {
           playBtn.disabled = false;
         }
         this.isPlayTransitioning = false;
-      }, delayToNextCycle + periodMs);
+      }, 500);
     }, 3000);
   }
 
   triggerMasterPause() {
-    const delayToNextCycle = this.syncEngine.getTimeToNextCycleStart();
-    const periodMs = this.syncEngine.period * 1000;
-
-    // Schedule 0.5s 5000Hz pause tone at next cycle + 0.05s
-    setTimeout(() => {
-      this.toneGen.playPauseSignal();
-    }, delayToNextCycle + 50);
-
-    // Synchronously pause playback on the cycle IMMEDIATELY following the pause signal
+    this.toneGen.playPauseSignal();
     setTimeout(() => {
       this.isPlaying = false;
       this.ytPlayer.pause();
       document.getElementById('btn-play-pause').innerText = '▶️';
-    }, delayToNextCycle + periodMs);
+    }, 500);
   }
 
   triggerMasterNextTrack() {
@@ -761,60 +385,32 @@ class AppController {
     document.getElementById('master-track-index').innerText = `第 ${this.ytPlayer.currentIndex + 1} / ${this.config.urls.length} 首`;
   }
 
-  startPauseProgressLoop() {
-    // Background 5s pause progress signal loop removed per user directive
-  }
-
-  stopPauseProgressLoop() {
-    if (this.pauseSyncTimer) {
-      clearInterval(this.pauseSyncTimer);
-      this.pauseSyncTimer = null;
-    }
-  }
-
-  // --- ACOUSTIC COMMAND DETECTION LISTENERS (FOR SLAVES & MASTER) ---
+  // --- ACOUSTIC COMMAND DETECTION LISTENERS (FOR SLAVES) ---
 
   bindDSPCommandListeners() {
-    // 0. Real-time 528Hz Volume Visualizer Update
-    this.dsp.on('energy528Update', (data) => {
-      if (this.volumeChart) {
-        this.volumeChart.addSample(data.energy);
-      }
-      const tag = document.getElementById('volume-current-tag');
-      if (tag) {
-        tag.innerText = `目前音量: ${Math.round(data.energy)}`;
-      }
-    });
-
     // 1. Start Play Command (4000 Hz)
     this.dsp.on('cmdStart', () => {
-      const delayToNextCycle = this.syncEngine.getTimeToNextCycleStart();
-      setTimeout(() => {
-        this.isPlaying = true;
-        const currentSec = this.ytPlayer.getCurrentTime();
-        if (currentSec > 0.5) {
-          this.ytPlayer.seekTo(currentSec);
-        }
-        this.ytPlayer.play();
-        this.updateSlaveUIStatus();
-      }, delayToNextCycle);
+      this.isPlaying = true;
+      const currentSec = this.ytPlayer.getCurrentTime();
+      if (currentSec > 0.5) {
+        this.ytPlayer.seekTo(currentSec);
+      }
+      this.ytPlayer.play();
+      this.updateSlaveUIStatus();
     });
 
     // 2. Pause Command (5000 Hz)
     this.dsp.on('cmdPause', () => {
-      const delayToNextCycle = this.syncEngine.getTimeToNextCycleStart();
-      setTimeout(() => {
-        this.isPlaying = false;
-        this.ytPlayer.pause();
-        this.updateSlaveUIStatus();
-      }, delayToNextCycle);
+      this.isPlaying = false;
+      this.ytPlayer.pause();
+      this.updateSlaveUIStatus();
     });
 
     // 3. Progress Sync Command (4500Hz + 10x0.2s FSK + 4500Hz)
     this.dsp.on('cmdProgressSync', (timeSec) => {
       if (!this.isPlaying) {
         const current = this.ytPlayer.getCurrentTime();
-        if (Math.abs(current - timeSec) > 1.0) { // Only adjust if time diff > 1 second
+        if (Math.abs(current - timeSec) > 1.0) {
           this.ytPlayer.seekTo(timeSec);
         }
       }

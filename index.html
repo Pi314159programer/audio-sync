@@ -21,17 +21,6 @@
 
   <div id="app-container">
 
-    <!-- Real-time Diagnostic Debug HUD Overlay -->
-    <div id="debug-hud" class="debug-hud">
-      <div class="debug-title">🛠️ Live Sync Debug HUD</div>
-      <div class="debug-row"><span>Role / Zone:</span> <strong id="db-role-zone">Master (Zone A)</strong></div>
-      <div class="debug-row"><span>Master m:</span> <strong id="db-master-m">0 ms</strong></div>
-      <div class="debug-row"><span>Slave self m:</span> <strong id="db-slave-m">0 ms</strong></div>
-      <div class="debug-row"><span>Phase Error:</span> <strong id="db-diff-ms">0 ms</strong></div>
-      <div class="debug-row"><span>Sync Mode:</span> <strong id="db-mode">READY</strong></div>
-      <div class="debug-row"><span>Lock Cycles:</span> <strong id="db-locks">0 / 3</strong></div>
-    </div>
-
     <!-- VIEW 1: ROLE SELECTION -->
     <div id="view-role-selection" class="panel-card">
       <div class="app-header">
@@ -42,12 +31,12 @@
         <button id="btn-select-master" class="role-btn">
           <div class="role-icon">🎛️</div>
           <div class="role-name">主控者</div>
-          <div class="role-desc">設置同步範圍、聲部數量與曲目，發起校正與播控</div>
+          <div class="role-desc">設置同步範圍、聲部數量與曲目，發起與播控</div>
         </button>
         <button id="btn-select-slave" class="role-btn">
           <div class="role-icon">📱</div>
           <div class="role-name">非主控者</div>
-          <div class="role-desc">掃描 Qrcode 選擇聲部，加入聲學同步播放</div>
+          <div class="role-desc">掃描 Qrcode 選擇聲部，加入同步播放</div>
         </button>
       </div>
     </div>
@@ -90,14 +79,6 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="input-audio-file">
-          <span>校正音檔上傳 (選擇性，800 KB 以內)</span>
-          <span id="audio-file-badge" style="font-size:0.75rem; color:var(--text-muted);">未選擇檔案</span>
-        </label>
-        <input type="file" id="input-audio-file" class="form-input" accept="audio/*">
-      </div>
-
-      <div class="form-group">
         <label class="form-label">
           <span>YouTube 連結</span>
           <span id="yt-count-label" style="font-size:0.75rem; color:var(--text-muted);">0 / 50</span>
@@ -115,26 +96,18 @@
       <button id="btn-confirm-master-setup" class="btn-primary">確認並產生 QR Code</button>
     </div>
 
-    <!-- VIEW 3: MASTER QR CODE & SYNC TRIGGER -->
+    <!-- VIEW 3: MASTER QR CODE -->
     <div id="view-master-qr" class="panel-card hidden">
       <div class="app-header">
-        <div class="header-with-clk">
-          <div>
-            <h1 class="app-title">提供裝置掃描</h1>
-            <p class="app-subtitle">請讓非主控者掃描此 Qrcode 進行設定</p>
-          </div>
-          <div class="clk-indicator-wrap" title="共用 clk 脈衝指示器">
-            <div id="master-qr-clk-ball" class="clk-pulse-ball"></div>
-            <span class="clk-indicator-text">clk 脈衝</span>
-          </div>
-        </div>
+        <h1 class="app-title">提供裝置掃描</h1>
+        <p class="app-subtitle">請讓非主控者掃描此 Qrcode 進行設定</p>
       </div>
 
       <div class="qr-display-area">
         <div id="qrcode-canvas-container"></div>
       </div>
 
-      <button id="btn-start-sync-master" class="btn-primary">同步 (發起共用 clk 校正)</button>
+      <button id="btn-enter-master-control" class="btn-primary">進入主控台</button>
     </div>
 
     <!-- VIEW 4: SLAVE SCANNER & PART SELECTION -->
@@ -147,15 +120,6 @@
       <!-- Camera Scanner Container -->
       <div id="scanner-box" class="form-group">
         <div id="reader"></div>
-        <div id="fountain-progress-container" class="hidden" style="margin-top:1rem; width:100%;">
-          <div style="font-size:0.8rem; color:var(--text-main); margin-bottom:0.3rem; display:flex; justify-content:space-between; font-weight:600;">
-            <span>📡 光學噴泉碼重組進度</span>
-            <span id="fountain-progress-text" style="color:var(--accent-cyan);">0% (0 / 0 封包)</span>
-          </div>
-          <div style="height:10px; background:rgba(255,255,255,0.1); border-radius:5px; overflow:hidden;">
-            <div id="fountain-progress-bar" style="width: 0%; height:100%; background:linear-gradient(90deg, #00f2fe, #4facfe); transition:width 0.15s ease-out;"></div>
-          </div>
-        </div>
       </div>
 
       <!-- Fallback Input Toggle -->
@@ -178,52 +142,13 @@
           <!-- Dynamic part buttons -->
         </div>
       </div>
-
-      <!-- Waiting Overlay -->
-      <div id="slave-waiting-box" class="hidden" style="text-align:center; padding:1rem 0;">
-        <div class="sync-status-text">等待同步中...</div>
-        <div class="sync-subtext">主控者按下「同步」按鈕後將自動進行聲學校正</div>
-      </div>
-    </div>
-
-    <!-- VIEW 5: SYNCHRONIZING CALIBRATION STATE -->
-    <div id="view-syncing" class="panel-card hidden">
-      <div class="sync-animation-box">
-        <div class="pulse-circle">📡</div>
-        <div id="sync-status-title" class="sync-status-text">正在同步 (20秒)...</div>
-        <div id="sync-status-sub" class="sync-subtext">透過耦合振盪器原理進行共用 clk 聲學校正中</div>
-        
-        <div class="sync-progress-container">
-          <div id="sync-progress-bar" class="sync-progress-bar-fill"></div>
-        </div>
-        <div id="sync-progress-text" class="sync-progress-label">0% (0.0 / 20.0 秒)</div>
-      </div>
-
-      <!-- Real-time 528Hz Volume Monitor Chart -->
-      <div class="chart-section">
-        <div class="chart-header">
-          <span class="chart-title">📊 528Hz 接收音量即時監測 (10秒視窗)</span>
-          <span id="volume-current-tag" class="volume-badge">目前音量: 0</span>
-        </div>
-        <div class="canvas-wrapper">
-          <canvas id="canvas-528-volume"></canvas>
-        </div>
-      </div>
     </div>
 
     <!-- VIEW 6: MASTER CONTROL CONSOLE -->
     <div id="view-master-control" class="panel-card hidden">
       <div class="app-header">
-        <div class="header-with-clk">
-          <div>
-            <h1 class="app-title">主控操控台</h1>
-            <p class="app-subtitle" id="master-status-indicator">狀態：共用 clk 校正完畢</p>
-          </div>
-          <div class="clk-indicator-wrap" title="共用 clk 脈衝指示器">
-            <div id="master-clk-ball" class="clk-pulse-ball"></div>
-            <span class="clk-indicator-text">clk 脈衝</span>
-          </div>
-        </div>
+        <h1 class="app-title">主控操控台</h1>
+        <p class="app-subtitle" id="master-status-indicator">狀態：播放操控中</p>
       </div>
 
       <div class="master-controls">
@@ -257,21 +182,8 @@
 
     <!-- VIEW 7: SLAVE FULLSCREEN STATUS DISPLAY -->
     <div id="view-slave-status" class="slave-fullscreen-view hidden">
-      <div class="slave-clk-container" title="共用 clk 脈衝指示器">
-        <div id="slave-clk-ball" class="clk-pulse-ball"></div>
-        <span class="slave-clk-label">clk 脈衝</span>
-      </div>
       <div id="slave-music-note" class="music-note-icon">🎵</div>
       <div id="slave-part-badge" class="slave-part-badge">第 1 聲部 (已暫停)</div>
-    </div>
-
-    <!-- VIEW 8: SLAVE FULLWHITE TAP INTERFACE -->
-    <div id="view-white-screen" class="white-fullscreen-view hidden">
-      <div class="white-screen-card">
-        <div class="white-screen-icon">✨</div>
-        <div class="white-screen-title">光學同步完成</div>
-        <div class="white-screen-subtext">請點擊螢幕任意處發出傳輸之 5 音驗證</div>
-      </div>
     </div>
 
   </div>

@@ -10,7 +10,6 @@ export class DSPAnalyzer {
 
     // Buffer history for pattern matching
     this.freqHistory = [];
-    this.pulseHistory528 = [];
     
     // FSK buffer state
     this.fskDecoding = false;
@@ -55,10 +54,6 @@ export class DSPAnalyzer {
       return maxE;
     };
 
-    let p528Active = false;
-    let p528StartTime = 0;
-
-    let p432Counter = 0;
     let p4000BurstCount = 0;
     let p5000BurstCount = 0;
     let p4900Counter = 0;
@@ -72,38 +67,7 @@ export class DSPAnalyzer {
 
       const now = performance.now();
 
-      // 1. Detect 528Hz Sync Pulse
-      const energy528 = getFreqEnergy(528);
-
-      // Emit real-time 528Hz energy level update for volume visualizer chart
-      this.emit('energy528Update', { time: now, energy: energy528 });
-
-      if (energy528 > 140) { // Threshold
-        if (!p528Active) {
-          p528Active = true;
-          p528StartTime = now;
-        }
-      } else {
-        if (p528Active) {
-          p528Active = false;
-          const duration = (now - p528StartTime) / 1000;
-          this.emit('pulse528', { startTime: p528StartTime, duration });
-        }
-      }
-
-      // 2. Detect 432Hz Lock Tone (continuous tone for ~3s)
-      const energy432 = getFreqEnergy(432);
-      if (energy432 > 150) {
-        p432Counter++;
-        if (p432Counter >= 15) { // ~300ms of sustained 432Hz
-          p432Counter = 0;
-          this.emit('lock432');
-        }
-      } else {
-        p432Counter = Math.max(0, p432Counter - 1);
-      }
-
-      // 3. Detect 4000Hz Start Signal (3 bursts)
+      // 1. Detect 4000Hz Start Signal (3 bursts)
       const energy4000 = getFreqEnergy(4000);
       if (energy4000 > 150) {
         if (now - lastBurst4000Time > 150) { // New burst

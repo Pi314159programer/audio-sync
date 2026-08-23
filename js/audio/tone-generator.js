@@ -38,20 +38,6 @@ export class ToneGenerator {
   }
 
   /**
-   * Play 528Hz Sync Pulse Burst
-   */
-  play528Pulse(duration = 0.05, startTime = null) {
-    this.playTone(528, duration, startTime);
-  }
-
-  /**
-   * Play 3s 432Hz Calibration Complete Lock Tone
-   */
-  play432LockTone(startTime = null) {
-    this.playTone(432, 3.0, startTime);
-  }
-
-  /**
    * Play Start Play Tone Sequence (4000 Hz)
    * 0.1s 4000Hz - 0.1s silence - 0.1s 4000Hz - 0.1s silence - 0.1s 4000Hz
    */
