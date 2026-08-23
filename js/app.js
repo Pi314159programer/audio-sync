@@ -385,11 +385,11 @@ class AppController {
     if (this.slaveSyncState === 'NUDGE_AND_VERIFY') {
       const cnt = Math.floor((flashTime - this.slaveT0) % periodMs);
 
-      if (cnt >= 5 && cnt <= 15) {
-        // Ideal window (5 <= cnt <= 15) -> Fix limit to standard periodMs (e.g. 2000ms / 1999ms limit)
+      if (cnt >= 0 && cnt <= 25) {
+        // Ideal window (0 <= cnt <= 25) -> Fix limit to standard periodMs (e.g. 2000ms / 1999ms limit)
         this.slaveActiveCycleLimit = periodMs;
         this.slaveConsecutiveLocks++;
-        if (statusText) statusText.innerText = `已落入範圍！固定上限測試 (${this.slaveConsecutiveLocks}/5) [cnt: ${cnt}]`;
+        if (statusText) statusText.innerText = `已落入範圍 (0~25)！固定上限測試 (${this.slaveConsecutiveLocks}/5) [cnt: ${cnt}]`;
 
         if (this.slaveConsecutiveLocks >= 5) {
           // Calibration Complete!
@@ -404,9 +404,8 @@ class AppController {
           }, 600);
         }
       } else {
-        // Outside 5~15 -> Adjust current cycle limit by offset
-        // User example: period = 2000, cnt = 70 -> offset = 70 - 5 = 65 -> cycle limit = 2000 + 65 = 2065
-        const offset = cnt - 5;
+        // Outside 0~25 -> Adjust current cycle limit by offset
+        const offset = cnt - 10;
         this.slaveActiveCycleLimit = periodMs + offset;
         this.slaveConsecutiveLocks = 0;
 
