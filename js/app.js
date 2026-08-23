@@ -320,7 +320,7 @@ class AppController {
     this.slaveActiveCycleLimit = periodMs;
 
     // Ensure Slave Clock & Side Ball animation loop is running
-    this.ensureSlaveClockLoop();
+    this.startSlaveClockLoop();
 
     // Start Camera Optical Flash Detector
     this.detector = new OpticalFlashDetector(null, (flashTime) => {
@@ -435,7 +435,7 @@ class AppController {
         }
 
         // Transition directly to Slave Status View
-        this.ensureSlaveClockLoop();
+        this.startSlaveClockLoop();
         this.showView('view-slave-status');
         this.updateSlaveUIStatus();
       });
@@ -443,15 +443,19 @@ class AppController {
     }
   }
 
-  ensureSlaveClockLoop() {
+  startSlaveClockLoop() {
+    if (this.slaveAnimFrameId) {
+      cancelAnimationFrame(this.slaveAnimFrameId);
+      this.slaveAnimFrameId = null;
+    }
+
     const periodMs = (this.syncEngine.period || 0.5) * 1000;
     if (!this.slaveT0) {
       this.slaveT0 = performance.now();
     }
-    if (this.slaveAnimFrameId) return;
 
-    let slaveLastRenderedCycle = -1;
-    let slaveFlashOnTime = 0;
+    this.slaveLastRenderedCycle = -1;
+    this.slaveFlashOnTime = 0;
 
     const slaveLoop = () => {
       if (this.slaveT0) {
@@ -466,14 +470,14 @@ class AppController {
         }
 
         const currentCycle = Math.floor(elapsed / periodMs);
-        const cnt = Math.floor(elapsed % periodMs);
 
         const ball = document.getElementById('slave-pulse-ball');
         const sideBall = document.getElementById('slave-side-pulse-ball');
 
-        if (currentCycle !== slaveLastRenderedCycle) {
-          slaveLastRenderedCycle = currentCycle;
-          slaveFlashOnTime = now;
+        if (currentCycle !== this.slaveLastRenderedCycle) {
+          this.slaveLastRenderedCycle = currentCycle;
+          this.slaveFlashOnTime = now;
+
           if (ball) ball.classList.add('active');
           if (sideBall) {
             sideBall.classList.add('active');
@@ -484,10 +488,10 @@ class AppController {
           }
         } else {
           // Remove active class ONLY on subsequent animation frames
-          if (ball && (now - slaveFlashOnTime >= 10)) {
+          if (ball && (now - this.slaveFlashOnTime >= 10)) {
             ball.classList.remove('active');
           }
-          if (sideBall && (now - slaveFlashOnTime >= 100)) {
+          if (sideBall && (now - this.slaveFlashOnTime >= 100)) {
             sideBall.classList.remove('active');
             sideBall.style.backgroundColor = '#0f172a';
             sideBall.style.borderColor = '#334155';
