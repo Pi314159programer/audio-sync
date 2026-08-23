@@ -107,10 +107,25 @@
         <div id="qrcode-canvas-container"></div>
       </div>
 
-      <button id="btn-enter-master-control" class="btn-primary">進入主控台</button>
+      <button id="btn-start-master-calibration" class="btn-primary">同步校正</button>
     </div>
 
-    <!-- VIEW 4: SLAVE SCANNER & PART SELECTION -->
+    <!-- VIEW 5a: MASTER OPTICAL CALIBRATION -->
+    <div id="view-master-calibration" class="panel-card hidden">
+      <div class="app-header">
+        <h1 class="app-title">主控者同步校正</h1>
+        <p class="app-subtitle">脈衝球閃爍中，請讓非主控者對準螢幕</p>
+      </div>
+
+      <div class="pulse-ball-container">
+        <div id="master-pulse-ball" class="pulse-ball-large"></div>
+        <div class="pulse-ball-label">主控脈衝球</div>
+      </div>
+
+      <button id="btn-enter-master-control" class="btn-primary" style="margin-top:1.5rem;">進入主控台</button>
+    </div>
+
+    <!-- VIEW 4: SLAVE SCANNER -->
     <div id="view-slave-setup" class="panel-card hidden">
       <div class="app-header">
         <h1 class="app-title">非主控者設定</h1>
@@ -132,15 +147,37 @@
         <input type="text" id="input-manual-json" class="form-input" placeholder="在此貼上同步 JSON 數據">
         <button id="btn-submit-manual-json" class="btn-primary" style="margin-top:0.5rem;">載入數據</button>
       </div>
+    </div>
 
-      <!-- Part Selection Section (Hidden until QR scanned) -->
-      <div id="part-selection-box" class="hidden">
-        <div class="form-label" style="text-align:center; display:block; margin-bottom:0.5rem;">
-          請選擇您的聲部
-        </div>
-        <div id="slave-parts-grid" class="parts-grid">
-          <!-- Dynamic part buttons -->
-        </div>
+    <!-- VIEW 5b: SLAVE OPTICAL CALIBRATION -->
+    <div id="view-slave-calibration" class="panel-card hidden">
+      <div class="app-header">
+        <h1 class="app-title">非主控者同步校正</h1>
+        <p class="app-subtitle">請將鏡頭對準主控者螢幕中央之脈衝球</p>
+      </div>
+
+      <!-- Camera Preview Viewport -->
+      <div id="slave-camera-box" class="camera-analysis-box"></div>
+
+      <div class="calibration-status-box">
+        <div id="slave-sync-status-text" class="status-badge">正在偵測主控者脈衝球...</div>
+      </div>
+
+      <div class="pulse-ball-container" style="margin-top:1rem;">
+        <div id="slave-pulse-ball" class="pulse-ball-large"></div>
+        <div class="pulse-ball-label">自身脈衝球</div>
+      </div>
+    </div>
+
+    <!-- VIEW 4b: SLAVE PART SELECTION -->
+    <div id="view-slave-part-select" class="panel-card hidden">
+      <div class="app-header">
+        <h1 class="app-title">選擇聲部</h1>
+        <p class="app-subtitle">光學校正完成，請選擇您的聲部</p>
+      </div>
+
+      <div id="slave-parts-grid" class="parts-grid">
+        <!-- Dynamic part buttons -->
       </div>
     </div>
 

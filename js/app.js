@@ -4,6 +4,7 @@ import { DSPAnalyzer } from './audio/dsp-analyzer.js';
 import { SyncEngine } from './audio/sync-engine.js';
 import { YouTubePlayerManager } from './youtube-player.js';
 import { QRManager } from './qr-manager.js';
+import { OpticalFlashDetector } from './optical-detector.js';
 
 class AppController {
   constructor() {
@@ -28,6 +29,18 @@ class AppController {
     this.isMuted = false;
     this.partStates = {}; // { 1: true, 2: true, ... } true=playing, false=muted
     this.seekWasAdjusted = false;
+
+    // Master & Slave Clock / Calibration Timers
+    this.masterClockTimer = null;
+    this.masterT0 = null;
+
+    this.slaveClockTimer = null;
+    this.slaveT0 = null;
+    this.slaveActiveCycleLimit = 2000;
+    this.slaveFlashHistory = [];
+    this.slaveSyncState = 'IDLE'; // 'IDLE', 'DETECTING_INTERVALS', 'NUDGE_AND_VERIFY', 'COMPLETE'
+    this.slaveConsecutiveLocks = 0;
+    this.detector = null;
 
     // Voice Part Color Mapping
     this.partColors = {
@@ -55,7 +68,10 @@ class AppController {
       'view-role-selection',
       'view-master-setup',
       'view-master-qr',
+      'view-master-calibration',
       'view-slave-setup',
+      'view-slave-calibration',
+      'view-slave-part-select',
       'view-master-control',
       'view-slave-status'
     ];
@@ -135,10 +151,20 @@ class AppController {
       );
     });
 
-    // 3. Master Enter Control Console Button
+    // 3. Master Start Calibration Button (轉至主控校正畫面)
+    const startMasterCalibBtn = document.getElementById('btn-start-master-calibration');
+    if (startMasterCalibBtn) {
+      startMasterCalibBtn.addEventListener('click', () => {
+        this.showView('view-master-calibration');
+        this.startMasterClockLoop();
+      });
+    }
+
+    // Master Enter Control Console Button
     const enterMasterBtn = document.getElementById('btn-enter-master-control');
     if (enterMasterBtn) {
       enterMasterBtn.addEventListener('click', () => {
+        this.stopMasterClockLoop();
         this.enterMasterControlConsole();
       });
     }
@@ -214,6 +240,38 @@ class AppController {
     });
   }
 
+  // --- MASTER OPTICAL PULSE BALL CLOCK LOOP ---
+
+  startMasterClockLoop() {
+    this.stopMasterClockLoop();
+
+    const periodMs = (this.syncEngine.period || 0.5) * 1000;
+    this.masterT0 = performance.now();
+
+    this.masterClockTimer = setInterval(() => {
+      const elapsed = performance.now() - this.masterT0;
+      const cnt = Math.floor(elapsed % periodMs);
+
+      const ball = document.getElementById('master-pulse-ball');
+      if (ball) {
+        if (cnt >= 0 && cnt <= 10) {
+          ball.classList.add('active');
+        } else {
+          ball.classList.remove('active');
+        }
+      }
+    }, 1);
+  }
+
+  stopMasterClockLoop() {
+    if (this.masterClockTimer) {
+      clearInterval(this.masterClockTimer);
+      this.masterClockTimer = null;
+    }
+  }
+
+  // --- SLAVE OPTICAL SCANNING & CLK ALIGNMENT ---
+
   onSlaveQRScanned(data) {
     this.config = data;
 
@@ -221,14 +279,128 @@ class AppController {
     if (data.zone) this.config.zone = data.zone;
     this.syncEngine.configureRange(this.config.range);
 
-    // Hide scanner, show part selection grid
-    document.getElementById('scanner-box').classList.add('hidden');
-    document.getElementById('part-selection-box').classList.remove('hidden');
+    // Transition to Slave Optical Calibration View
+    this.showView('view-slave-calibration');
+    this.startSlaveOpticalCalibration();
+  }
 
+  startSlaveOpticalCalibration() {
+    const periodMs = (this.syncEngine.period || 0.5) * 1000;
+
+    this.slaveFlashHistory = [];
+    this.slaveSyncState = 'DETECTING_INTERVALS';
+    this.slaveConsecutiveLocks = 0;
+    this.slaveT0 = null;
+    this.slaveActiveCycleLimit = periodMs;
+
+    // Slave Pulse Ball Timer
+    if (this.slaveClockTimer) clearInterval(this.slaveClockTimer);
+    this.slaveClockTimer = setInterval(() => {
+      if (!this.slaveT0) return;
+
+      const now = performance.now();
+      let elapsed = now - this.slaveT0;
+      const activeLimit = this.slaveActiveCycleLimit;
+
+      if (elapsed >= activeLimit) {
+        this.slaveT0 += activeLimit;
+        this.slaveActiveCycleLimit = periodMs; // Reset back to standard periodMs for subsequent cycles
+        elapsed = now - this.slaveT0;
+      }
+
+      const cnt = Math.floor(elapsed % periodMs);
+      const ball = document.getElementById('slave-pulse-ball');
+      if (ball) {
+        if (cnt >= 0 && cnt <= 10) {
+          ball.classList.add('active');
+        } else {
+          ball.classList.remove('active');
+        }
+      }
+    }, 1);
+
+    // Start Camera Optical Flash Detector
+    this.detector = new OpticalFlashDetector(null, (flashTime) => {
+      this.handleSlaveFlashDetected(flashTime, periodMs);
+    });
+    this.detector.start('slave-camera-box');
+  }
+
+  handleSlaveFlashDetected(flashTime, periodMs) {
+    const statusText = document.getElementById('slave-sync-status-text');
+
+    if (this.slaveSyncState === 'DETECTING_INTERVALS') {
+      this.slaveFlashHistory.push(flashTime);
+
+      if (this.slaveFlashHistory.length >= 4) {
+        const n = this.slaveFlashHistory.length;
+        const i1 = this.slaveFlashHistory[n-3] - this.slaveFlashHistory[n-4];
+        const i2 = this.slaveFlashHistory[n-2] - this.slaveFlashHistory[n-3];
+        const i3 = this.slaveFlashHistory[n-1] - this.slaveFlashHistory[n-2];
+
+        const diff1 = Math.abs(i1 - periodMs);
+        const diff2 = Math.abs(i2 - periodMs);
+        const diff3 = Math.abs(i3 - periodMs);
+
+        // Check if 3 consecutive intervals match equal distance (within 20ms)
+        if (diff1 <= 20 && diff2 <= 20 && diff3 <= 20) {
+          // 4th Flash detected -> Start Slave clk!
+          this.slaveT0 = flashTime;
+          // 1st cycle limit reduced by 15ms (to compensate for camera latency)
+          this.slaveActiveCycleLimit = periodMs - 15;
+          this.slaveSyncState = 'NUDGE_AND_VERIFY';
+          this.slaveConsecutiveLocks = 0;
+
+          if (statusText) statusText.innerText = `已對齊時距！開啟相機校正 (0/5)...`;
+        } else {
+          this.slaveFlashHistory.shift(); // Slide window
+          if (statusText) statusText.innerText = `正在分析脈衝時距 (${this.slaveFlashHistory.length}/4)...`;
+        }
+      } else {
+        if (statusText) statusText.innerText = `正在捕捉主控脈衝 (${this.slaveFlashHistory.length}/4)...`;
+      }
+      return;
+    }
+
+    if (this.slaveSyncState === 'NUDGE_AND_VERIFY') {
+      const cnt = Math.floor((flashTime - this.slaveT0) % periodMs);
+
+      if (cnt >= 5 && cnt <= 15) {
+        // Ideal window (5 <= cnt <= 15)
+        this.slaveConsecutiveLocks++;
+        if (statusText) statusText.innerText = `脈衝同步對齊中 (${this.slaveConsecutiveLocks}/5) [cnt: ${cnt}]`;
+
+        if (this.slaveConsecutiveLocks >= 5) {
+          // Calibration Complete!
+          this.slaveSyncState = 'COMPLETE';
+          if (statusText) statusText.innerText = `✨ 光學校正完成！進入聲部選擇`;
+
+          setTimeout(() => {
+            if (this.detector) this.detector.stop();
+            if (this.slaveClockTimer) clearInterval(this.slaveClockTimer);
+            this.showView('view-slave-part-select');
+            this.renderSlavePartSelectionGrid();
+          }, 600);
+        }
+      } else {
+        // Outside 5~15 -> Adjust current cycle limit by offset
+        // User example: period = 2000, cnt = 70 -> offset = 70 - 5 = 65 -> cycle limit = 2000 + 65 = 2065
+        const offset = cnt - 5;
+        this.slaveActiveCycleLimit = periodMs + offset;
+        this.slaveConsecutiveLocks = 0;
+
+        if (statusText) statusText.innerText = `微調相位 [cnt: ${cnt} -> 週期上限 ${Math.round(this.slaveActiveCycleLimit)}ms]`;
+      }
+    }
+  }
+
+  renderSlavePartSelectionGrid() {
     const grid = document.getElementById('slave-parts-grid');
-    grid.innerHTML = '';
+    if (!grid) return;
 
+    grid.innerHTML = '';
     const totalParts = Math.max(1, this.config.partCount);
+
     for (let i = 1; i <= totalParts; i++) {
       const btn = document.createElement('button');
       btn.className = 'part-select-btn';
@@ -291,8 +463,9 @@ class AppController {
 
   renderMasterPartButtons() {
     const container = document.getElementById('master-part-buttons');
-    container.innerHTML = '';
+    if (!container) return;
 
+    container.innerHTML = '';
     const total = this.config.partCount;
     if (total === 0) {
       container.innerHTML = '<div style="grid-column:1/-1; text-align:center; color:var(--text-muted); font-size:0.8rem;">未啟用分部</div>';

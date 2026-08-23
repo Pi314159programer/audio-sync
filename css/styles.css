@@ -350,6 +350,71 @@ html, body {
   box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
 }
 
+/* Optical Calibration Views & Large Pulse Ball */
+.pulse-ball-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem 0;
+}
+
+.pulse-ball-large {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  transition: background-color 0.01s ease, border-color 0.01s ease, box-shadow 0.01s ease, transform 0.01s ease;
+  opacity: 0.25;
+}
+
+.pulse-ball-large.active {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 0 40px #ffffff, 0 0 80px rgba(255, 255, 255, 1) !important;
+  transform: scale(1.1);
+  opacity: 1 !important;
+}
+
+.pulse-ball-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.camera-analysis-box {
+  width: 100%;
+  max-width: 320px;
+  height: 200px;
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  border: 2px solid var(--accent-cyan);
+  margin: 0 auto;
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.25);
+  background: #000;
+}
+
+.calibration-status-box {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.status-badge {
+  background: rgba(6, 182, 212, 0.15);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  color: var(--accent-cyan);
+  padding: 0.5rem 1.25rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+}
+
 /* Master Control Console Panel */
 .master-controls {
   display: flex;
