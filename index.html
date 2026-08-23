@@ -183,9 +183,14 @@
 
     <!-- VIEW 6: MASTER CONTROL CONSOLE -->
     <div id="view-master-control" class="panel-card hidden">
-      <div class="app-header">
-        <h1 class="app-title">主控操控台</h1>
-        <p class="app-subtitle" id="master-status-indicator">狀態：播放操控中</p>
+      <div class="app-header" style="display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <h1 class="app-title">主控操控台</h1>
+          <p class="app-subtitle" id="master-status-indicator">狀態：播放操控中</p>
+        </div>
+        <div class="side-pulse-wrapper" title="CLK 脈衝指標">
+          <div id="master-side-pulse-ball" class="pulse-ball-small"></div>
+        </div>
       </div>
 
       <div class="master-controls">
@@ -219,6 +224,9 @@
 
     <!-- VIEW 7: SLAVE FULLSCREEN STATUS DISPLAY -->
     <div id="view-slave-status" class="slave-fullscreen-view hidden">
+      <div class="side-pulse-wrapper-slave" title="CLK 脈衝指標">
+        <div id="slave-side-pulse-ball" class="pulse-ball-small"></div>
+      </div>
       <div id="slave-music-note" class="music-note-icon">🎵</div>
       <div id="slave-part-badge" class="slave-part-badge">第 1 聲部 (已暫停)</div>
     </div>

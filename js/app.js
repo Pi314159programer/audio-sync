@@ -258,14 +258,16 @@ class AppController {
       const cnt = Math.floor(elapsed % periodMs);
 
       const ball = document.getElementById('master-pulse-ball');
-      if (ball) {
-        if (currentCycle !== lastRenderedCycle) {
-          lastRenderedCycle = currentCycle;
-          flashOnTime = now;
-          ball.classList.add('active');
-        } else if (now - flashOnTime >= 10 || cnt > 10) {
-          ball.classList.remove('active');
-        }
+      const sideBall = document.getElementById('master-side-pulse-ball');
+
+      if (currentCycle !== lastRenderedCycle) {
+        lastRenderedCycle = currentCycle;
+        flashOnTime = now;
+        if (ball) ball.classList.add('active');
+        if (sideBall) sideBall.classList.add('active');
+      } else if (now - flashOnTime >= 10 || cnt > 10) {
+        if (ball) ball.classList.remove('active');
+        if (sideBall) sideBall.classList.remove('active');
       }
       this.masterAnimFrameId = requestAnimationFrame(loop);
     };
@@ -277,7 +279,6 @@ class AppController {
       cancelAnimationFrame(this.masterAnimFrameId);
       this.masterAnimFrameId = null;
     }
-    this.masterT0 = null;
   }
 
   // --- SLAVE OPTICAL SCANNING & CLK ALIGNMENT ---
@@ -305,7 +306,7 @@ class AppController {
     let slaveLastRenderedCycle = -1;
     let slaveFlashOnTime = 0;
 
-    // Slave Pulse Ball requestAnimationFrame Loop
+    // Slave Pulse Ball requestAnimationFrame Loop (Runs continuously even after calibration)
     if (this.slaveAnimFrameId) cancelAnimationFrame(this.slaveAnimFrameId);
 
     const slaveLoop = () => {
@@ -322,20 +323,21 @@ class AppController {
 
         const currentCycle = Math.floor(elapsed / periodMs);
         const cnt = Math.floor(elapsed % periodMs);
+
         const ball = document.getElementById('slave-pulse-ball');
-        if (ball) {
-          if (currentCycle !== slaveLastRenderedCycle) {
-            slaveLastRenderedCycle = currentCycle;
-            slaveFlashOnTime = now;
-            ball.classList.add('active');
-          } else if (now - slaveFlashOnTime >= 10 || cnt > 10) {
-            ball.classList.remove('active');
-          }
+        const sideBall = document.getElementById('slave-side-pulse-ball');
+
+        if (currentCycle !== slaveLastRenderedCycle) {
+          slaveLastRenderedCycle = currentCycle;
+          slaveFlashOnTime = now;
+          if (ball) ball.classList.add('active');
+          if (sideBall) sideBall.classList.add('active');
+        } else if (now - slaveFlashOnTime >= 10 || cnt > 10) {
+          if (ball) ball.classList.remove('active');
+          if (sideBall) sideBall.classList.remove('active');
         }
       }
-      if (this.slaveSyncState !== 'COMPLETE') {
-        this.slaveAnimFrameId = requestAnimationFrame(slaveLoop);
-      }
+      this.slaveAnimFrameId = requestAnimationFrame(slaveLoop);
     };
     slaveLoop();
 
@@ -397,8 +399,7 @@ class AppController {
           if (statusText) statusText.innerText = `✨ 光學校正完成！進入聲部選擇`;
 
           setTimeout(() => {
-            if (this.detector) this.detector.stop();
-            if (this.slaveAnimFrameId) cancelAnimationFrame(this.slaveAnimFrameId);
+            if (this.detector) this.detector.stop(); // Stop camera stream only!
             this.showView('view-slave-part-select');
             this.renderSlavePartSelectionGrid();
           }, 600);
