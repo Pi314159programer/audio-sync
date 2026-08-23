@@ -247,35 +247,33 @@ class AppController {
 
     const periodMs = (this.syncEngine.period || 0.5) * 1000;
     this.masterT0 = performance.now();
-    let lastRenderedCycle = -1;
-    let flashOnTime = 0;
 
     const loop = () => {
       if (!this.masterT0) return;
       const now = performance.now();
-      const elapsed = now - this.masterT0;
-      const currentCycle = Math.floor(elapsed / periodMs);
+      const cnt = Math.floor((now - this.masterT0) % periodMs);
 
       const ball = document.getElementById('master-pulse-ball');
       const sideBall = document.getElementById('master-side-pulse-ball');
 
-      if (currentCycle !== lastRenderedCycle) {
-        lastRenderedCycle = currentCycle;
-        flashOnTime = now;
-        if (ball) ball.classList.add('active');
-        if (sideBall) {
+      // Large calibration pulse ball (10ms duration, cnt 0..10)
+      if (ball) {
+        if (cnt >= 0 && cnt <= 10) {
+          ball.classList.add('active');
+        } else {
+          ball.classList.remove('active');
+        }
+      }
+
+      // Small side pulse ball in control console (0.1s / 100ms duration, cnt 0..100)
+      if (sideBall) {
+        if (cnt >= 0 && cnt <= 100) {
           sideBall.classList.add('active');
           sideBall.style.backgroundColor = '#00ffcc';
           sideBall.style.borderColor = '#ffffff';
           sideBall.style.boxShadow = '0 0 20px #00ffcc, 0 0 40px #00ffcc';
           sideBall.style.transform = 'scale(1.25)';
-        }
-      } else {
-        // Remove active class ONLY on subsequent animation frames
-        if (ball && (now - flashOnTime >= 10)) {
-          ball.classList.remove('active');
-        }
-        if (sideBall && (now - flashOnTime >= 100)) {
+        } else {
           sideBall.classList.remove('active');
           sideBall.style.backgroundColor = '#0f172a';
           sideBall.style.borderColor = '#334155';
@@ -454,10 +452,6 @@ class AppController {
       this.slaveT0 = performance.now();
     }
 
-    this.slaveCycleCount = 0;
-    this.slaveLastRenderedCycle = -1;
-    this.slaveFlashOnTime = 0;
-
     const slaveLoop = () => {
       if (this.slaveT0) {
         const now = performance.now();
@@ -467,31 +461,32 @@ class AppController {
         if (elapsed >= activeLimit) {
           this.slaveT0 += activeLimit;
           this.slaveActiveCycleLimit = periodMs;
-          this.slaveCycleCount++;
           elapsed = now - this.slaveT0;
         }
+
+        const cnt = Math.floor(elapsed % periodMs);
 
         const ball = document.getElementById('slave-pulse-ball');
         const sideBall = document.getElementById('slave-side-pulse-ball');
 
-        if (this.slaveCycleCount !== this.slaveLastRenderedCycle) {
-          this.slaveLastRenderedCycle = this.slaveCycleCount;
-          this.slaveFlashOnTime = now;
+        // Large calibration pulse ball (10ms duration, cnt 0..10)
+        if (ball) {
+          if (cnt >= 0 && cnt <= 10) {
+            ball.classList.add('active');
+          } else {
+            ball.classList.remove('active');
+          }
+        }
 
-          if (ball) ball.classList.add('active');
-          if (sideBall) {
+        // Small side pulse ball in status view (0.1s / 100ms duration, cnt 0..100)
+        if (sideBall) {
+          if (cnt >= 0 && cnt <= 100) {
             sideBall.classList.add('active');
             sideBall.style.backgroundColor = '#00ffcc';
             sideBall.style.borderColor = '#ffffff';
             sideBall.style.boxShadow = '0 0 20px #00ffcc, 0 0 40px #00ffcc';
             sideBall.style.transform = 'scale(1.25)';
-          }
-        } else {
-          // Remove active class ONLY on subsequent animation frames
-          if (ball && (now - this.slaveFlashOnTime >= 10)) {
-            ball.classList.remove('active');
-          }
-          if (sideBall && (now - this.slaveFlashOnTime >= 100)) {
+          } else {
             sideBall.classList.remove('active');
             sideBall.style.backgroundColor = '#0f172a';
             sideBall.style.borderColor = '#334155';
