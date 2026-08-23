@@ -373,7 +373,7 @@ class AppController {
           this.slaveSyncState = 'NUDGE_AND_VERIFY';
           this.slaveConsecutiveLocks = 0;
 
-          if (statusText) statusText.innerText = `已對齊時距！開啟相機校正 (0/5)...`;
+          if (statusText) statusText.innerText = `已對齊時距！開啟相機校正 (0/3)...`;
         } else {
           this.slaveFlashHistory.shift(); // Slide window
           if (statusText) statusText.innerText = `正在分析脈衝時距 (${this.slaveFlashHistory.length}/4)...`;
@@ -391,9 +391,9 @@ class AppController {
         // Ideal window (0 <= cnt <= 30) -> Fix limit to standard periodMs (e.g. 2000ms / 1999ms limit)
         this.slaveActiveCycleLimit = periodMs;
         this.slaveConsecutiveLocks++;
-        if (statusText) statusText.innerText = `已落入範圍 (0~30)！固定上限測試 (${this.slaveConsecutiveLocks}/5) [cnt: ${cnt}]`;
+        if (statusText) statusText.innerText = `已落入範圍 (0~30)！固定上限測試 (${this.slaveConsecutiveLocks}/3) [cnt: ${cnt}]`;
 
-        if (this.slaveConsecutiveLocks >= 5) {
+        if (this.slaveConsecutiveLocks >= 3) {
           // Calibration Complete!
           this.slaveSyncState = 'COMPLETE';
           if (statusText) statusText.innerText = `✨ 光學校正完成！進入聲部選擇`;
