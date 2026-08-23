@@ -143,6 +143,7 @@ class AppController {
       this.showView('view-master-qr');
 
       this.syncEngine.configureRange(this.config.range);
+      this.startMasterClockLoop();
 
       // Generate Standard Static QR Code
       this.qrManager.generateStaticQR(
@@ -164,7 +165,6 @@ class AppController {
     const enterMasterBtn = document.getElementById('btn-enter-master-control');
     if (enterMasterBtn) {
       enterMasterBtn.addEventListener('click', () => {
-        this.stopMasterClockLoop();
         this.enterMasterControlConsole();
       });
     }
@@ -263,7 +263,13 @@ class AppController {
         lastRenderedCycle = currentCycle;
         flashOnTime = now;
         if (ball) ball.classList.add('active');
-        if (sideBall) sideBall.classList.add('active');
+        if (sideBall) {
+          sideBall.classList.add('active');
+          sideBall.style.backgroundColor = '#00ffcc';
+          sideBall.style.borderColor = '#ffffff';
+          sideBall.style.boxShadow = '0 0 20px #00ffcc, 0 0 40px #00ffcc';
+          sideBall.style.transform = 'scale(1.25)';
+        }
       } else {
         // Remove active class ONLY on subsequent animation frames
         if (ball && (now - flashOnTime >= 10)) {
@@ -271,6 +277,10 @@ class AppController {
         }
         if (sideBall && (now - flashOnTime >= 100)) {
           sideBall.classList.remove('active');
+          sideBall.style.backgroundColor = '#0f172a';
+          sideBall.style.borderColor = '#334155';
+          sideBall.style.boxShadow = 'none';
+          sideBall.style.transform = 'scale(1.0)';
         }
       }
 
@@ -465,7 +475,13 @@ class AppController {
           slaveLastRenderedCycle = currentCycle;
           slaveFlashOnTime = now;
           if (ball) ball.classList.add('active');
-          if (sideBall) sideBall.classList.add('active');
+          if (sideBall) {
+            sideBall.classList.add('active');
+            sideBall.style.backgroundColor = '#00ffcc';
+            sideBall.style.borderColor = '#ffffff';
+            sideBall.style.boxShadow = '0 0 20px #00ffcc, 0 0 40px #00ffcc';
+            sideBall.style.transform = 'scale(1.25)';
+          }
         } else {
           // Remove active class ONLY on subsequent animation frames
           if (ball && (now - slaveFlashOnTime >= 10)) {
@@ -473,6 +489,10 @@ class AppController {
           }
           if (sideBall && (now - slaveFlashOnTime >= 100)) {
             sideBall.classList.remove('active');
+            sideBall.style.backgroundColor = '#0f172a';
+            sideBall.style.borderColor = '#334155';
+            sideBall.style.boxShadow = 'none';
+            sideBall.style.transform = 'scale(1.0)';
           }
         }
       }
