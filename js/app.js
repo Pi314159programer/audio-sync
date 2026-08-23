@@ -247,17 +247,20 @@ class AppController {
 
     const periodMs = (this.syncEngine.period || 0.5) * 1000;
     this.masterT0 = performance.now();
+    let lastRenderedCycle = -1;
 
     const loop = () => {
       if (!this.masterT0) return;
       const elapsed = performance.now() - this.masterT0;
+      const currentCycle = Math.floor(elapsed / periodMs);
       const cnt = Math.floor(elapsed % periodMs);
 
       const ball = document.getElementById('master-pulse-ball');
       if (ball) {
-        if (cnt >= 0 && cnt <= 10) {
+        if (currentCycle !== lastRenderedCycle && cnt <= 10) {
+          lastRenderedCycle = currentCycle;
           ball.classList.add('active');
-        } else {
+        } else if (cnt > 10) {
           ball.classList.remove('active');
         }
       }
@@ -296,6 +299,7 @@ class AppController {
     this.slaveConsecutiveLocks = 0;
     this.slaveT0 = null;
     this.slaveActiveCycleLimit = periodMs;
+    let slaveLastRenderedCycle = -1;
 
     // Slave Pulse Ball requestAnimationFrame Loop
     if (this.slaveAnimFrameId) cancelAnimationFrame(this.slaveAnimFrameId);
@@ -308,16 +312,18 @@ class AppController {
 
         if (elapsed >= activeLimit) {
           this.slaveT0 += activeLimit;
-          this.slaveActiveCycleLimit = periodMs; // Reset back to standard periodMs for subsequent cycles
+          this.slaveActiveCycleLimit = periodMs;
           elapsed = now - this.slaveT0;
         }
 
+        const currentCycle = Math.floor(elapsed / periodMs);
         const cnt = Math.floor(elapsed % periodMs);
         const ball = document.getElementById('slave-pulse-ball');
         if (ball) {
-          if (cnt >= 0 && cnt <= 10) {
+          if (currentCycle !== slaveLastRenderedCycle && cnt <= 10) {
+            slaveLastRenderedCycle = currentCycle;
             ball.classList.add('active');
-          } else {
+          } else if (cnt > 10) {
             ball.classList.remove('active');
           }
         }
