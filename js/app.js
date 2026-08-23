@@ -243,15 +243,14 @@ class AppController {
   // --- MASTER OPTICAL PULSE BALL CLOCK LOOP ---
 
   startMasterClockLoop() {
-    this.stopMasterClockLoop();
+    if (this.masterAnimFrameId) cancelAnimationFrame(this.masterAnimFrameId);
 
     const periodMs = (this.syncEngine.period || 0.5) * 1000;
-    this.masterT0 = performance.now();
+    if (!this.masterT0) this.masterT0 = performance.now();
     let lastRenderedCycle = -1;
     let flashOnTime = 0;
 
     const loop = () => {
-      if (!this.masterT0) return;
       const now = performance.now();
       const elapsed = now - this.masterT0;
       const currentCycle = Math.floor(elapsed / periodMs);
@@ -265,9 +264,15 @@ class AppController {
         flashOnTime = now;
         if (ball) ball.classList.add('active');
         if (sideBall) sideBall.classList.add('active');
-      } else if (now - flashOnTime >= 10 || cnt > 10) {
-        if (ball) ball.classList.remove('active');
-        if (sideBall) sideBall.classList.remove('active');
+      } else {
+        // Large calibration ball turns off after 10ms (strictly 0..10ms)
+        if (now - flashOnTime >= 10 || cnt > 10) {
+          if (ball) ball.classList.remove('active');
+        }
+        // Small side UI ball stays active for 80ms so human eye easily sees it pulse
+        if (now - flashOnTime >= 80 || cnt > 80) {
+          if (sideBall) sideBall.classList.remove('active');
+        }
       }
       this.masterAnimFrameId = requestAnimationFrame(loop);
     };
@@ -303,43 +308,8 @@ class AppController {
     this.slaveConsecutiveLocks = 0;
     this.slaveT0 = null;
     this.slaveActiveCycleLimit = periodMs;
-    let slaveLastRenderedCycle = -1;
-    let slaveFlashOnTime = 0;
 
-    // Slave Pulse Ball requestAnimationFrame Loop (Runs continuously even after calibration)
-    if (this.slaveAnimFrameId) cancelAnimationFrame(this.slaveAnimFrameId);
-
-    const slaveLoop = () => {
-      if (this.slaveT0) {
-        const now = performance.now();
-        let elapsed = now - this.slaveT0;
-        const activeLimit = this.slaveActiveCycleLimit;
-
-        if (elapsed >= activeLimit) {
-          this.slaveT0 += activeLimit;
-          this.slaveActiveCycleLimit = periodMs;
-          elapsed = now - this.slaveT0;
-        }
-
-        const currentCycle = Math.floor(elapsed / periodMs);
-        const cnt = Math.floor(elapsed % periodMs);
-
-        const ball = document.getElementById('slave-pulse-ball');
-        const sideBall = document.getElementById('slave-side-pulse-ball');
-
-        if (currentCycle !== slaveLastRenderedCycle) {
-          slaveLastRenderedCycle = currentCycle;
-          slaveFlashOnTime = now;
-          if (ball) ball.classList.add('active');
-          if (sideBall) sideBall.classList.add('active');
-        } else if (now - slaveFlashOnTime >= 10 || cnt > 10) {
-          if (ball) ball.classList.remove('active');
-          if (sideBall) sideBall.classList.remove('active');
-        }
-      }
-      this.slaveAnimFrameId = requestAnimationFrame(slaveLoop);
-    };
-    slaveLoop();
+    this.ensureSlaveClockLoop();
 
     // Start Camera Optical Flash Detector
     this.detector = new OpticalFlashDetector(null, (flashTime) => {
@@ -495,9 +465,15 @@ class AppController {
           slaveFlashOnTime = now;
           if (ball) ball.classList.add('active');
           if (sideBall) sideBall.classList.add('active');
-        } else if (now - slaveFlashOnTime >= 10 || cnt > 10) {
-          if (ball) ball.classList.remove('active');
-          if (sideBall) sideBall.classList.remove('active');
+        } else {
+          // Large calibration ball turns off after 10ms
+          if (now - slaveFlashOnTime >= 10 || cnt > 10) {
+            if (ball) ball.classList.remove('active');
+          }
+          // Small side UI ball stays active for 80ms so human eye easily sees it pulse
+          if (now - slaveFlashOnTime >= 80 || cnt > 80) {
+            if (sideBall) sideBall.classList.remove('active');
+          }
         }
       }
       this.slaveAnimFrameId = requestAnimationFrame(slaveLoop);

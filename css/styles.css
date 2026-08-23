@@ -386,21 +386,20 @@ html, body {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
-  border: 2px solid rgba(255, 255, 255, 0.4);
+  background: #0f172a;
+  border: 2px solid rgba(6, 182, 212, 0.4);
   box-shadow: none !important;
-  transition: none !important;
+  transition: transform 0.05s ease, background-color 0.05s ease, box-shadow 0.05s ease !important;
   opacity: 1 !important;
   will-change: background-color, border-color, box-shadow, transform;
 }
 
 .pulse-ball-small.active {
   background: #ffffff !important;
-  border-color: #ffffff !important;
-  box-shadow: 0 0 20px #ffffff, 0 0 40px #ffffff !important;
-  transform: scale(1.15);
+  border-color: var(--accent-cyan) !important;
+  box-shadow: 0 0 20px var(--accent-cyan), 0 0 40px #ffffff !important;
+  transform: scale(1.25);
   opacity: 1 !important;
-  transition: none !important;
 }
 
 .side-pulse-wrapper {
