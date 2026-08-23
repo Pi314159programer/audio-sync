@@ -243,14 +243,15 @@ class AppController {
   // --- MASTER OPTICAL PULSE BALL CLOCK LOOP ---
 
   startMasterClockLoop() {
-    if (this.masterAnimFrameId) cancelAnimationFrame(this.masterAnimFrameId);
+    this.stopMasterClockLoop();
 
     const periodMs = (this.syncEngine.period || 0.5) * 1000;
-    if (!this.masterT0) this.masterT0 = performance.now();
+    this.masterT0 = performance.now();
     let lastRenderedCycle = -1;
     let flashOnTime = 0;
 
     const loop = () => {
+      if (!this.masterT0) return;
       const now = performance.now();
       const elapsed = now - this.masterT0;
       const currentCycle = Math.floor(elapsed / periodMs);
@@ -264,16 +265,22 @@ class AppController {
         flashOnTime = now;
         if (ball) ball.classList.add('active');
         if (sideBall) sideBall.classList.add('active');
-      } else {
-        // Large calibration ball turns off after 10ms (strictly 0..10ms)
+      }
+
+      // Large calibration pulse ball (10ms duration, cnt 0..10)
+      if (ball) {
         if (now - flashOnTime >= 10 || cnt > 10) {
-          if (ball) ball.classList.remove('active');
-        }
-        // Small side UI ball stays active for 80ms so human eye easily sees it pulse
-        if (now - flashOnTime >= 80 || cnt > 80) {
-          if (sideBall) sideBall.classList.remove('active');
+          ball.classList.remove('active');
         }
       }
+
+      // Small side pulse ball in control console (0.1s / 100ms duration, cnt 0..100)
+      if (sideBall) {
+        if (now - flashOnTime >= 100 || cnt > 100) {
+          sideBall.classList.remove('active');
+        }
+      }
+
       this.masterAnimFrameId = requestAnimationFrame(loop);
     };
     loop();
@@ -309,6 +316,7 @@ class AppController {
     this.slaveT0 = null;
     this.slaveActiveCycleLimit = periodMs;
 
+    // Ensure Slave Clock & Side Ball animation loop is running
     this.ensureSlaveClockLoop();
 
     // Start Camera Optical Flash Detector
@@ -465,14 +473,19 @@ class AppController {
           slaveFlashOnTime = now;
           if (ball) ball.classList.add('active');
           if (sideBall) sideBall.classList.add('active');
-        } else {
-          // Large calibration ball turns off after 10ms
+        }
+
+        // Large calibration pulse ball (10ms duration, cnt 0..10)
+        if (ball) {
           if (now - slaveFlashOnTime >= 10 || cnt > 10) {
-            if (ball) ball.classList.remove('active');
+            ball.classList.remove('active');
           }
-          // Small side UI ball stays active for 80ms so human eye easily sees it pulse
-          if (now - slaveFlashOnTime >= 80 || cnt > 80) {
-            if (sideBall) sideBall.classList.remove('active');
+        }
+
+        // Small side pulse ball in status view (0.1s / 100ms duration, cnt 0..100)
+        if (sideBall) {
+          if (now - slaveFlashOnTime >= 100 || cnt > 100) {
+            sideBall.classList.remove('active');
           }
         }
       }
