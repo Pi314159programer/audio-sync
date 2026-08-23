@@ -383,8 +383,8 @@ html, body {
 
 /* Small Side Pulse Indicator Ball */
 .pulse-ball-small {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.15);
   border: 2px solid rgba(255, 255, 255, 0.4);
@@ -397,7 +397,7 @@ html, body {
 .pulse-ball-small.active {
   background: #ffffff !important;
   border-color: #ffffff !important;
-  box-shadow: 0 0 15px #ffffff, 0 0 30px #ffffff !important;
+  box-shadow: 0 0 20px #ffffff, 0 0 40px #ffffff !important;
   transform: scale(1.15);
   opacity: 1 !important;
   transition: none !important;
@@ -406,11 +406,11 @@ html, body {
 .side-pulse-wrapper {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0.4rem;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .side-pulse-wrapper-slave {
@@ -419,13 +419,20 @@ html, body {
   right: 1.5rem;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0.5rem;
-  background: rgba(0, 0, 0, 0.4);
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(8px);
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
   z-index: 101;
+}
+
+.side-pulse-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--accent-cyan);
+  letter-spacing: 0.05em;
 }
 
 .pulse-ball-label {

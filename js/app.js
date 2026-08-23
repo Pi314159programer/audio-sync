@@ -454,6 +454,7 @@ class AppController {
         }
 
         // Transition directly to Slave Status View
+        this.ensureSlaveClockLoop();
         this.showView('view-slave-status');
         this.updateSlaveUIStatus();
       });
@@ -461,7 +462,54 @@ class AppController {
     }
   }
 
+  ensureSlaveClockLoop() {
+    const periodMs = (this.syncEngine.period || 0.5) * 1000;
+    if (!this.slaveT0) {
+      this.slaveT0 = performance.now();
+    }
+    if (this.slaveAnimFrameId) return;
+
+    let slaveLastRenderedCycle = -1;
+    let slaveFlashOnTime = 0;
+
+    const slaveLoop = () => {
+      if (this.slaveT0) {
+        const now = performance.now();
+        let elapsed = now - this.slaveT0;
+        const activeLimit = this.slaveActiveCycleLimit || periodMs;
+
+        if (elapsed >= activeLimit) {
+          this.slaveT0 += activeLimit;
+          this.slaveActiveCycleLimit = periodMs;
+          elapsed = now - this.slaveT0;
+        }
+
+        const currentCycle = Math.floor(elapsed / periodMs);
+        const cnt = Math.floor(elapsed % periodMs);
+
+        const ball = document.getElementById('slave-pulse-ball');
+        const sideBall = document.getElementById('slave-side-pulse-ball');
+
+        if (currentCycle !== slaveLastRenderedCycle) {
+          slaveLastRenderedCycle = currentCycle;
+          slaveFlashOnTime = now;
+          if (ball) ball.classList.add('active');
+          if (sideBall) sideBall.classList.add('active');
+        } else if (now - slaveFlashOnTime >= 10 || cnt > 10) {
+          if (ball) ball.classList.remove('active');
+          if (sideBall) sideBall.classList.remove('active');
+        }
+      }
+      this.slaveAnimFrameId = requestAnimationFrame(slaveLoop);
+    };
+    slaveLoop();
+  }
+
   enterMasterControlConsole() {
+    if (!this.masterT0) {
+      this.startMasterClockLoop();
+    }
+
     for (let i = 1; i <= Math.max(8, this.config.partCount); i++) {
       this.partStates[i] = true;
     }
