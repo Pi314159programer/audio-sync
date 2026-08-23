@@ -454,6 +454,7 @@ class AppController {
       this.slaveT0 = performance.now();
     }
 
+    this.slaveCycleCount = 0;
     this.slaveLastRenderedCycle = -1;
     this.slaveFlashOnTime = 0;
 
@@ -466,16 +467,15 @@ class AppController {
         if (elapsed >= activeLimit) {
           this.slaveT0 += activeLimit;
           this.slaveActiveCycleLimit = periodMs;
+          this.slaveCycleCount++;
           elapsed = now - this.slaveT0;
         }
-
-        const currentCycle = Math.floor(elapsed / periodMs);
 
         const ball = document.getElementById('slave-pulse-ball');
         const sideBall = document.getElementById('slave-side-pulse-ball');
 
-        if (currentCycle !== this.slaveLastRenderedCycle) {
-          this.slaveLastRenderedCycle = currentCycle;
+        if (this.slaveCycleCount !== this.slaveLastRenderedCycle) {
+          this.slaveLastRenderedCycle = this.slaveCycleCount;
           this.slaveFlashOnTime = now;
 
           if (ball) ball.classList.add('active');
