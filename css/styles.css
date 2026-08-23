@@ -366,15 +366,16 @@ html, body {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.08);
   border: 3px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  box-shadow: none !important;
   transition: none !important;
-  opacity: 0.25;
+  opacity: 1 !important;
+  will-change: background-color, border-color, box-shadow, transform;
 }
 
 .pulse-ball-large.active {
   background: #ffffff !important;
   border-color: #ffffff !important;
-  box-shadow: 0 0 50px #ffffff, 0 0 100px rgba(255, 255, 255, 1) !important;
+  box-shadow: 0 0 60px #ffffff, 0 0 120px #ffffff !important;
   transform: scale(1.1);
   opacity: 1 !important;
   transition: none !important;

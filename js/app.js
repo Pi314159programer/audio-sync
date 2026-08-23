@@ -255,7 +255,7 @@ class AppController {
 
       const ball = document.getElementById('master-pulse-ball');
       if (ball) {
-        if (cnt >= 0 && cnt <= 30) {
+        if (cnt >= 0 && cnt <= 10) {
           ball.classList.add('active');
         } else {
           ball.classList.remove('active');
@@ -315,7 +315,7 @@ class AppController {
         const cnt = Math.floor(elapsed % periodMs);
         const ball = document.getElementById('slave-pulse-ball');
         if (ball) {
-          if (cnt >= 0 && cnt <= 30) {
+          if (cnt >= 0 && cnt <= 10) {
             ball.classList.add('active');
           } else {
             ball.classList.remove('active');
